@@ -59,14 +59,15 @@ Para poder estructurar el grafo que nos representa las conexiones de los diferen
 | 19 | Cristo Blanco        | -13.5071500  | -71.9736400   | Norte   |
 | 20 | Estadio Garcilaso    | -13.5209800  | -71.9698500   | Centro  |
 
-Tenemos así 15 nodos representando lugares reales del Cusco. La Plaza de Armas será el centro o lugar en el que esta la empresa; ahora, calculamos las distancias y las conexiones entre los nodos para ello se hará el uso dela fórmula Harversine.  
+Tenemos así 20 nodos representando lugares reales del Cusco. La Plaza de Armas será el centro o lugar en el que esta la empresa; ahora, calculamos las distancias y las conexiones entre los nodos para ello se hará el uso dela fórmula Harversine.  
+
 $$
-d = 2r \cdot \arcsin \left(
+d = 2r \arcsin \left(
 \sqrt{
-\sin^2\left(\frac{\varphi_2-\varphi_1}{2}\right)
+\sin^2\left(\frac{\phi_2 - \phi_1}{2}\right)
 +
-\cos(\varphi_1)\cos(\varphi_2)
-\sin^2\left(\frac{\lambda_2-\lambda_1}{2}\right)
+\cos(\phi_1)\cos(\phi_2)
+\sin^2\left(\frac{\lambda_2 - \lambda_1}{2}\right)
 }
 \right)
 $$
