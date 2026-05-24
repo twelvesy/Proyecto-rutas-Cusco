@@ -215,5 +215,4 @@ if __name__ == "__main__":
     print(f"  Ambos métodos deben dar el mismo resultado óptimo.")
     print(f"  Tabulación  → llena toda la tabla  : O(n*W) siempre")
     print(f"  Memoización → solo subproblemas usados: O(n*W) peor caso")
- 
- 
+

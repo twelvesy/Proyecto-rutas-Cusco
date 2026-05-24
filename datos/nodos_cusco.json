@@ -14,6 +14,11 @@
     {"id": 12, "nombre": "Huancaro",           "lat": -13.5363860, "lon": -71.9803792, "zona": "oeste"},
     {"id": 13, "nombre": "Mercado Molino",     "lat": -13.5358002, "lon": -71.9618861, "zona": "oeste"},
     {"id": 14, "nombre": "Belenpampa",         "lat": -13.5252381, "lon": -71.9792285, "zona": "oeste"},
-    {"id": 15, "nombre": "Terminal Terrestre", "lat": -13.5348979, "lon": -71.9653603, "zona": "oeste"}
+    {"id": 15, "nombre": "Terminal Terrestre", "lat": -13.5348979, "lon": -71.9653603, "zona": "oeste"},
+    {"id": 16, "nombre": "Qorikancha",         "lat": -13.5202622, "lon": -71.9751405, "zona": "centro"},
+    {"id": 17, "nombre": "Mercado Wanchaq",    "lat": -13.5218263, "lon": -71.9719791, "zona": "sur"},
+    {"id": 18, "nombre": "Ovalo Pachacutec",   "lat": -13.5176800, "lon": -71.9856200, "zona": "oeste"},
+    {"id": 19, "nombre": "Cristo Blanco",      "lat": -13.5095660, "lon": -71.9780878, "zona": "norte"},
+    {"id": 20, "nombre": "Estadio Garcilaso",  "lat": -13.5210180, "lon": -71.9656428, "zona": "centro"}
   ]
 }

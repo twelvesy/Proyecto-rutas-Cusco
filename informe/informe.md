@@ -53,6 +53,11 @@ Para poder estructurar el grafo que nos representa las conexiones de los diferen
 | 13 | Mercado Molino       | -13.5358002  | -71.9618861   | Oeste   |
 | 14 | Belenpampa           | -13.5252381  | -71.9792285   | Oeste   |
 | 15 | Terminal Terrestre   | -13.5348979  | -71.9653603   | Oeste   |
+| 16 | Qorikancha           | -13.5187741  | -71.9762609   | Centro  |
+| 17 | Mercado Wanchaq      | -13.5243590  | -71.9621470   | Sur     |
+| 18 | Ovalo Pachacutec     | -13.5176800  | -71.9856200   | Oeste   |
+| 19 | Cristo Blanco        | -13.5071500  | -71.9736400   | Norte   |
+| 20 | Estadio Garcilaso    | -13.5209800  | -71.9698500   | Centro  |
 
 Tenemos así 15 nodos representando lugares reales del Cusco. La Plaza de Armas será el centro o lugar en el que esta la empresa; ahora, calculamos las distancias y las conexiones entre los nodos para ello se hará el uso dela fórmula Harversine.  
 $$
@@ -78,15 +83,15 @@ donde:
 - $\arcsin$: Función arco seno.  
 
 Esta formula nos permite calcular la distancia entre dos puntos sobre la superficie terrestre utilizando sus coordenadas geográficas (latitud y longitud).
-Como resultado obtenemos 69 conexiones y que la distancia máxima entre nodos conectados es de 2500 metros. 
+Como resultado obtenemos 138 conexiones y que la distancia máxima entre nodos conectados es de 2500 metros. 
 
 Grafo de la Ciudad del Cusco
 Información general:
 
 | Característica | Valor |
 |---|---|
-| Número de nodos | 15 |
-| Número de conexiones | 69 |
+| Número de nodos | 20 |
+| Número de conexiones | 138 |
 
 ---
 
@@ -94,21 +99,26 @@ Conexiones por nodo:
 
 | ID | Nodo | Conexiones |
 |---|---|---|
-| 1 | Plaza de Armas | 10 |
-| 2 | Mercado San Pedro | 10 |
-| 3 | San Blas | 11 |
-| 4 | La Merced | 10 |
-| 5 | Limaqpampa | 12 |
-| 6 | San Cristóbal | 8 |
-| 7 | Sacsayhuamán | 8 |
-| 8 | Av. de la Cultura | 5 |
-| 9 | Wanchaq | 13 |
-| 10 | Ttio | 9 |
+| 1 | Plaza de Armas | 15 |
+| 2 | Mercado San Pedro | 15 |
+| 3 | San Blas | 16 |
+| 4 | La Merced | 15 |
+| 5 | Limaqpampa | 17 |
+| 6 | San Cristóbal | 13 |
+| 7 | Sacsayhuamán | 13 |
+| 8 | Av. de la Cultura | 6 |
+| 9 | Wanchaq | 18 |
+| 10 | Ttio | 12 |
 | 11 | San Sebastián | 2 |
-| 12 | Huancaro | 10 |
-| 13 | Mercado Molino | 7 |
-| 14 | Belenpampa | 12 |
-| 15 | Terminal Terrestre | 11 |
+| 12 | Huancaro | 14 |
+| 13 | Mercado Molino | 10 |
+| 14 | Belenpampa | 17 |
+| 15 | Terminal Terrestre | 14 |
+| 16 | Qorikancha | 17 |
+| 17 | Mercado Wanchaq | 17 |
+| 18 | Ovalo Pachacutec | 14 |
+| 19 | Cristo Blanco | 13 |
+| 20 | Estadio Garcilaso | 18 |
 
 ---
 
@@ -126,6 +136,11 @@ Detalle de aristas:
 | Plaza de Armas | Huancaro | 2188.3 m |
 | Plaza de Armas | Belenpampa | 943.1 m |
 | Plaza de Armas | Terminal Terrestre | 2483.7 m |
+| Plaza de Armas | Qorikancha | 552.9 m |
+| Plaza de Armas | Mercado Wanchaq | 925.7 m |
+| Plaza de Armas | Ovalo Pachacutec | 746.6 m |
+| Plaza de Armas | Cristo Blanco | 804.2 m |
+| Plaza de Armas | Estadio Garcilaso | 1496.8 m |
 | Mercado San Pedro | San Blas | 1137.1 m |
 | Mercado San Pedro | La Merced | 481.3 m |
 | Mercado San Pedro | Limaqpampa | 990.3 m |
@@ -135,6 +150,11 @@ Detalle de aristas:
 | Mercado San Pedro | Huancaro | 1634.0 m |
 | Mercado San Pedro | Belenpampa | 507.3 m |
 | Mercado San Pedro | Terminal Terrestre | 2341.3 m |
+| Mercado San Pedro | Qorikancha | 796.1 m |
+| Mercado San Pedro | Mercado Wanchaq | 1119.0 m |
+| Mercado San Pedro | Ovalo Pachacutec | 581.3 m |
+| Mercado San Pedro | Cristo Blanco | 1437.1 m |
+| Mercado San Pedro | Estadio Garcilaso | 1806.2 m |
 | San Blas | La Merced | 678.2 m |
 | San Blas | Limaqpampa | 491.8 m |
 | San Blas | San Cristóbal | 605.8 m |
@@ -144,6 +164,11 @@ Detalle de aristas:
 | San Blas | Huancaro | 2455.9 m |
 | San Blas | Belenpampa | 1244.2 m |
 | San Blas | Terminal Terrestre | 2412.3 m |
+| San Blas | Qorikancha | 582.3 m |
+| San Blas | Mercado Wanchaq | 796.0 m |
+| San Blas | Ovalo Pachacutec | 1245.0 m |
+| San Blas | Cristo Blanco | 729.4 m |
+| San Blas | Estadio Garcilaso | 1156.6 m |
 | La Merced | Limaqpampa | 686.3 m |
 | La Merced | San Cristóbal | 534.0 m |
 | La Merced | Sacsayhuamán | 1093.1 m |
@@ -151,6 +176,11 @@ Detalle de aristas:
 | La Merced | Huancaro | 2014.0 m |
 | La Merced | Belenpampa | 775.3 m |
 | La Merced | Terminal Terrestre | 2415.4 m |
+| La Merced | Qorikancha | 545.0 m |
+| La Merced | Mercado Wanchaq | 928.2 m |
+| La Merced | Ovalo Pachacutec | 637.8 m |
+| La Merced | Cristo Blanco | 986.0 m |
+| La Merced | Estadio Garcilaso | 1555.5 m |
 | Limaqpampa | San Cristóbal | 945.1 m |
 | Limaqpampa | Sacsayhuamán | 1543.5 m |
 | Limaqpampa | Wanchaq | 826.5 m |
@@ -159,32 +189,81 @@ Detalle de aristas:
 | Limaqpampa | Mercado Molino | 2214.2 m |
 | Limaqpampa | Belenpampa | 895.9 m |
 | Limaqpampa | Terminal Terrestre | 1934.9 m |
+| Limaqpampa | Qorikancha | 200.3 m |
+| Limaqpampa | Mercado Wanchaq | 316.0 m |
+| Limaqpampa | Ovalo Pachacutec | 1323.1 m |
+| Limaqpampa | Cristo Blanco | 1200.8 m |
+| Limaqpampa | Estadio Garcilaso | 869.3 m |
 | San Cristóbal | Sacsayhuamán | 606.7 m |
 | San Cristóbal | Wanchaq | 1743.2 m |
 | San Cristóbal | Belenpampa | 1308.6 m |
+| San Cristóbal | Qorikancha | 905.5 m |
+| San Cristóbal | Mercado Wanchaq | 1253.9 m |
+| San Cristóbal | Ovalo Pachacutec | 785.3 m |
+| San Cristóbal | Cristo Blanco | 472.2 m |
+| San Cristóbal | Estadio Garcilaso | 1743.0 m |
 | Sacsayhuamán | Wanchaq | 2317.4 m |
 | Sacsayhuamán | Belenpampa | 1855.2 m |
+| Sacsayhuamán | Qorikancha | 1512.3 m |
+| Sacsayhuamán | Mercado Wanchaq | 1855.9 m |
+| Sacsayhuamán | Ovalo Pachacutec | 1016.2 m |
+| Sacsayhuamán | Cristo Blanco | 523.4 m |
+| Sacsayhuamán | Estadio Garcilaso | 2297.8 m |
 | Av. de la Cultura | Wanchaq | 2159.4 m |
 | Av. de la Cultura | Ttio | 1483.9 m |
 | Av. de la Cultura | San Sebastián | 1110.4 m |
 | Av. de la Cultura | Mercado Molino | 1860.7 m |
 | Av. de la Cultura | Terminal Terrestre | 2148.8 m |
+| Av. de la Cultura | Estadio Garcilaso | 2113.1 m |
 | Wanchaq | Ttio | 1188.3 m |
 | Wanchaq | Huancaro | 2162.3 m |
 | Wanchaq | Mercado Molino | 1573.6 m |
 | Wanchaq | Belenpampa | 1411.8 m |
 | Wanchaq | Terminal Terrestre | 1397.5 m |
+| Wanchaq | Qorikancha | 962.8 m |
+| Wanchaq | Mercado Wanchaq | 595.0 m |
+| Wanchaq | Ovalo Pachacutec | 2131.6 m |
+| Wanchaq | Cristo Blanco | 1896.9 m |
+| Wanchaq | Estadio Garcilaso | 177.8 m |
 | Ttio | San Sebastián | 2485.0 m |
 | Ttio | Huancaro | 2253.3 m |
 | Ttio | Mercado Molino | 545.6 m |
 | Ttio | Belenpampa | 2155.8 m |
 | Ttio | Terminal Terrestre | 692.1 m |
+| Ttio | Qorikancha | 2015.8 m |
+| Ttio | Mercado Wanchaq | 1639.5 m |
+| Ttio | Estadio Garcilaso | 1270.1 m |
 | Huancaro | Mercado Molino | 2000.3 m |
 | Huancaro | Belenpampa | 1245.8 m |
 | Huancaro | Terminal Terrestre | 1632.0 m |
+| Huancaro | Qorikancha | 1880.2 m |
+| Huancaro | Mercado Wanchaq | 1856.3 m |
+| Huancaro | Ovalo Pachacutec | 2155.8 m |
+| Huancaro | Estadio Garcilaso | 2336.3 m |
 | Mercado Molino | Belenpampa | 2212.3 m |
 | Mercado Molino | Terminal Terrestre | 388.8 m |
+| Mercado Molino | Qorikancha | 2244.6 m |
+| Mercado Molino | Mercado Wanchaq | 1898.7 m |
+| Mercado Molino | Estadio Garcilaso | 1693.1 m |
 | Belenpampa | Terminal Terrestre | 1844.3 m |
+| Belenpampa | Qorikancha | 708.1 m |
+| Belenpampa | Mercado Wanchaq | 870.7 m |
+| Belenpampa | Ovalo Pachacutec | 1088.0 m |
+| Belenpampa | Cristo Blanco | 1747.0 m |
+| Belenpampa | Estadio Garcilaso | 1541.9 m |
+| Terminal Terrestre | Qorikancha | 1940.7 m |
+| Terminal Terrestre | Mercado Wanchaq | 1620.1 m |
+| Terminal Terrestre | Estadio Garcilaso | 1543.7 m |
+| Qorikancha | Mercado Wanchaq | 383.5 m |
+| Qorikancha | Ovalo Pachacutec | 1168.8 m |
+| Qorikancha | Cristo Blanco | 1231.3 m |
+| Qorikancha | Estadio Garcilaso | 1030.3 m |
+| Mercado Wanchaq | Ovalo Pachacutec | 1545.2 m |
+| Mercado Wanchaq | Cristo Blanco | 1514.8 m |
+| Mercado Wanchaq | Estadio Garcilaso | 690.9 m |
+| Ovalo Pachacutec | Cristo Blanco | 1215.4 m |
+| Ovalo Pachacutec | Estadio Garcilaso | 2191.5 m |
+| Cristo Blanco | Estadio Garcilaso | 1852.5 m |
 
 ---
 
