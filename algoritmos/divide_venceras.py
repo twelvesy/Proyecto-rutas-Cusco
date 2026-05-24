@@ -1,5 +1,5 @@
 import time
-from algoritmos.greedy import greedy_vecino_mas_cercano
+from algoritmos.greedy import greedy_pedido_mas_cercano
 
 #--- DIVIDE Y VENCERÁS (Partición Espacial Recursiva de la Red Vial)
 #--- Complejidad Temporal: O(n log n) debido a la ecuación de recurrencia T(n) = 2T(n/2) + O(n) por el cálculo de medianas.
