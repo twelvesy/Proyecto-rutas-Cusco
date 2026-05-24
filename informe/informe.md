@@ -316,7 +316,46 @@ Asignación de entregas rápidas en Cusco.
 ---
 
 ## 6. Programación Dinámica (`dinamica.py`)
-*(completar cuando termine el módulo)*
+
+### Caso de uso
+- Selección óptima de pedidos para cargar un vehículo de reparto con capacidad limitada.
+- Busca maximizar el valor total de los pedidos transportados sin superar el límite de peso.
+
+### Estrategia
+- El problema se modela como una variante del **Knapsack 0/1**.
+- Cada pedido tiene un peso y un valor, y la solución selecciona un subconjunto de pedidos.
+- Se implementan dos enfoques:
+  - **Tabulación (bottom-up)**: construye una tabla DP de tamaño O(n · W)
+    donde W es la capacidad de carga escalada.
+  - **Memoización (top-down)**: usa recursión con caché para evitar recalcular
+    subproblemas ya resueltos.
+
+### Detalles de implementación
+- Se escala el peso con un factor `ESCALA = 10` para manejar decimales
+  y usar índices enteros en la tabla.
+- La función `discretizar_peso(peso_kg)` convierte un peso como 4.5 kg a 45.
+- En `knapsack_tabulacion`, la tabla `dp[i][w]` guarda el valor máximo usando
+  los primeros `i` pedidos con capacidad `w`.
+- En `knapsack_memoizacion`, se usa un diccionario `memo[(i, w)]` para guardar
+  resultados parciales y evitar recomputar subproblemas.
+- Ambos métodos reconstruyen la solución mediante backtracking sobre las
+  decisiones almacenadas.
+
+### Complejidad
+- Tiempo: O(n · W), donde `n` es el número de pedidos y `W` la capacidad
+  escalada en unidades enteras.
+- Espacio: O(n · W) para la estructura de tabla en la versión de tabulación.
+- En la práctica, si la capacidad es 30 kg y se escala por 10, `W = 300`.
+
+### Ventajas y limitaciones
+- Ventaja: garantiza la solución óptima para la selección de pedidos.
+- Limitación: el costo depende de la capacidad total del vehículo, por lo que
+  puede crecer rápidamente si la capacidad y la resolución de peso aumentan.
+
+### Resultado esperado
+- Ambos métodos deben producir el mismo conjunto óptimo de pedidos.
+- El enfoque de tabulación recorre sistemáticamente todos los subproblemas,
+  mientras que la memoización solo resuelve los estados realmente usados.
 
 ---
 
