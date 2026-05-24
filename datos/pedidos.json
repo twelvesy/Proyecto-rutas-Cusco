@@ -14,6 +14,16 @@
     {"id": 12, "cliente": "Cliente L", "origen": 3,  "destino": 15, "peso": 4.5, "valor": 160, "prioridad": 2},
     {"id": 13, "cliente": "Cliente M", "origen": 14, "destino": 8,  "peso": 1.0, "valor": 55,  "prioridad": 1},
     {"id": 14, "cliente": "Cliente N", "origen": 10, "destino": 3,  "peso": 3.8, "valor": 130, "prioridad": 3},
-    {"id": 15, "cliente": "Cliente O", "origen": 12, "destino": 5,  "peso": 2.0, "valor": 100, "prioridad": 2}
+    {"id": 15, "cliente": "Cliente O", "origen": 12, "destino": 5,  "peso": 2.0, "valor": 100, "prioridad": 2},
+    {"id": 16, "cliente": "Cliente P", "origen": 16, "destino": 20, "peso": 1.8, "valor": 85,  "prioridad": 1},
+    {"id": 17, "cliente": "Cliente Q", "origen": 17, "destino": 8,  "peso": 3.2, "valor": 140, "prioridad": 2},
+    {"id": 18, "cliente": "Cliente R", "origen": 18, "destino": 4,  "peso": 0.5, "valor": 45,  "prioridad": 1},
+    {"id": 19, "cliente": "Cliente S", "origen": 19, "destino": 2,  "peso": 4.8, "valor": 175, "prioridad": 3},
+    {"id": 20, "cliente": "Cliente T", "origen": 20, "destino": 11, "peso": 2.8, "valor": 115, "prioridad": 2},
+    {"id": 21, "cliente": "Cliente U", "origen": 16, "destino": 7,  "peso": 5.5, "valor": 220, "prioridad": 3},
+    {"id": 22, "cliente": "Cliente V", "origen": 17, "destino": 14, "peso": 1.1, "valor": 70,  "prioridad": 1},
+    {"id": 23, "cliente": "Cliente W", "origen": 18, "destino": 10, "peso": 6.5, "valor": 240, "prioridad": 3},
+    {"id": 24, "cliente": "Cliente X", "origen": 19, "destino": 15, "peso": 2.3, "valor": 105, "prioridad": 2},
+    {"id": 25, "cliente": "Cliente Y", "origen": 20, "destino": 3,  "peso": 3.1, "valor": 125, "prioridad": 2}
   ]
 }
