@@ -12,25 +12,6 @@ def cargar_pedidos(ruta_json="datos/pedidos.json"):
     return data["pedidos"]
 
 
-# ================================================================
-#  PROGRAMACIÓN DINÁMICA — PROBLEMA DE LA MOCHILA 0/1 (Knapsack)
-#
-#  Objetivo: elegir qué pedidos cargar en el vehículo para
-#  MAXIMIZAR el valor total entregado sin exceder el peso máximo.
-#
-#  Por qué Prog. Dinámica y no Greedy aquí:
-#  - Greedy elegiría siempre el más valioso o el más liviano,
-#    pero eso no garantiza la combinación óptima global.
-#  - PD prueba TODAS las combinaciones posibles de forma
-#    inteligente, guardando resultados parciales para no
-#    recalcularlos (subestructura óptima + subproblemas solapados).
-#
-#  Complejidad temporal : O(n * W)
-#  Complejidad espacial : O(n * W)
-#  donde n = número de pedidos, W = capacidad máxima en kg * 10
-# ================================================================
-
-
 # ----------------------------------------------------------------
 #  UTILIDAD: convertir peso float → entero escalado
 #  El Knapsack clásico necesita índices enteros.
@@ -108,19 +89,6 @@ def knapsack_tabulacion(pedidos, capacidad_kg):
     return seleccionados, peso_total, valor_total
 
 
-# ----------------------------------------------------------------
-#  KNAPSACK — MEMOIZACIÓN (top-down recursivo)
-#
-#  Misma lógica que la tabulación pero siguiendo el flujo
-#  recursivo natural: parte del problema completo y va
-#  dividiéndolo, guardando cada subproblema resuelto en un
-#  diccionario memo para no repetir cálculos.
-#
-#  A diferencia de la tabulación, solo resuelve los subproblemas
-#  que realmente se necesitan (útil si W es muy grande).
-#
-#  Complejidad: O(n * W) tiempo y espacio (mismos estados)
-# ----------------------------------------------------------------
 def knapsack_memoizacion(pedidos, capacidad_kg):
     #---Capacidad en unidades escaladas
     W = discretizar_peso(capacidad_kg)
