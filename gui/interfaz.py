@@ -1,881 +1,1236 @@
 """
-interfaz.py — Dashboard Logístico de Cusco (Tkinter)
-=====================================================
-Interfaz moderna con mapa de fondo generado, sidebar animado,
-panel de métricas Big-O, y visualización interactiva del grafo.
+interfaz.py — Sistema de Gestión de Rutas Óptimas en Cusco
+===========================================================
+PyQt5 + QtWebEngineWidgets · Mapa Leaflet interactivo
+UNSAAC — Programación III, 2026
+Versión 2.0 — Paneles de control configurables por módulo
 """
 
-import tkinter as tk
-from tkinter import font as tkfont
-import os
-import sys
-import math
-import time
-import threading
-
+import sys, os, json, time
 _DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_DIR, ".."))
 
-from datos.grafo_base import cargar_nodos, construir_grafo
-from algoritmos.ordenacion import (cargar_pedidos, gnome_sort_prioridad,
-                                    comb_sot_peso, shell_sort_valor)
-from algoritmos.divide_venceras import procesar_divide_y_venceras
-from algoritmos.backtracking import backtracking_rutas_con_restricciones
-from algoritmos.dinamica import optimizar_carga_mochila
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QFrame, QScrollArea, QTextEdit,
+    QComboBox, QSpinBox, QDoubleSpinBox, QGroupBox, QCheckBox,
+    QListWidget, QListWidgetItem, QStackedWidget, QSizePolicy,
+    QAbstractItemView, QMessageBox
+)
+from PyQt5.QtCore  import Qt, QUrl, QObject, pyqtSlot, pyqtSignal
+from PyQt5.QtGui   import QFont, QColor, QPalette
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
+from PyQt5.QtWebChannel import QWebChannel
 
-# ══════════════════════════════════════════════════════════════
-#  PALETA DE COLORES
-# ══════════════════════════════════════════════════════════════
+from datos.grafo_base      import cargar_nodos, construir_grafo, haversine
+from algoritmos.ordenacion import (cargar_pedidos, gnome_sort_prioridad,
+                                   comb_sot_peso, shell_sort_valor)
+from algoritmos.divide_venceras  import procesar_divide_y_venceras
+from algoritmos.backtracking     import backtracking_rutas_con_restricciones
+from algoritmos.dinamica         import optimizar_carga_mochila
+from algoritmos.greedy           import (greedy_pedido_mas_cercano,
+                                         greedy_repartidor_mas_cercano)
+
+# ─────────────────────────────────────────────────────────────────
+#  PALETA
+# ─────────────────────────────────────────────────────────────────
 C = {
-    "bg_app":      "#0d1117",
-    "bg_sidebar":  "#161b22",
-    "bg_panel":    "#1c2128",
-    "bg_card":     "#21262d",
-    "bg_canvas":   "#0d1117",
-    "border":      "#30363d",
-    "accent":      "#58a6ff",
-    "accent2":     "#3fb950",
-    "accent3":     "#d29922",
-    "accent4":     "#f85149",
-    "accent5":     "#bc8cff",
-    "text_main":   "#e6edf3",
-    "text_sub":    "#8b949e",
-    "text_dim":    "#484f58",
-    # Módulos
-    "mod_orden":   "#8957e5",
-    "mod_greedy":  "#e67e22",
-    "mod_divide":  "#2ecc71",
-    "mod_dp":      "#3498db",
-    "mod_back":    "#e74c3c",
-    # Zonas
-    "zona0":       "#2ecc71",
-    "zona1":       "#e67e22",
-    "zona2":       "#9b59b6",
-    "zona3":       "#3498db",
+    "bg_app"  : "#0d1117", "bg_side" : "#161b22",
+    "bg_panel": "#1c2128", "bg_card" : "#21262d",
+    "border"  : "#30363d", "accent"  : "#58a6ff",
+    "green"   : "#3fb950", "yellow"  : "#d29922",
+    "red"     : "#f85149", "purple"  : "#bc8cff",
+    "orange"  : "#e67e22", "text"    : "#e6edf3",
+    "text_sub": "#8b949e", "text_dim": "#484f58",
 }
 
-COLORES_ZONA = [C["zona0"], C["zona1"], C["zona2"], C["zona3"]]
-
 MODULOS = [
-    ("📦", "Ordenamientos",    "Almacén", C["mod_orden"],  "O(n²)"),
-    ("🗺", "Divide y Vencerás","Zonas",   C["mod_divide"], "O(n log n)"),
-    ("🚧", "Backtracking",     "Vial",    C["mod_back"],   "O(V!)"),
-    ("⚖", "Mochila DP",       "Carga",   C["mod_dp"],     "O(n·W)"),
-    ("⚡", "Greedy",           "Ruta",    C["mod_greedy"], "O(n²)"),
+    ("📦", "Ordenamientos",     "Gnome · Comb · Shell",    C["purple"], "O(n²)"),
+    ("⚡", "Greedy",             "Vecino más cercano",       C["orange"], "O(n²)"),
+    ("🗺", "Divide y Vencerás", "Segmentación geográfica",  C["green"],  "O(n log n)"),
+    ("⚖",  "Mochila DP",        "Knapsack 0/1",             C["accent"], "O(n·W)"),
+    ("🚧", "Backtracking",      "Restricciones viales",     C["red"],    "O(V!)"),
 ]
+COLORES_ZONA = ["#2ecc71", "#e67e22", "#9b59b6", "#3498db"]
 
+# ─────────────────────────────────────────────────────────────────
+#  ESTILOS COMUNES
+# ─────────────────────────────────────────────────────────────────
+STYLE_COMBO = f"""
+    QComboBox {{
+        background:{C['bg_card']}; color:{C['text']};
+        border:1px solid {C['border']}; border-radius:4px;
+        padding:4px 8px; font-size:11px;
+    }}
+    QComboBox QAbstractItemView {{
+        background:{C['bg_card']}; color:{C['text']};
+        selection-background-color:{C['bg_panel']};
+        border:1px solid {C['border']};
+    }}
+    QComboBox::drop-down {{ border:none; }}
+"""
+STYLE_SPIN = f"""
+    QSpinBox, QDoubleSpinBox {{
+        background:{C['bg_card']}; color:{C['text']};
+        border:1px solid {C['border']}; border-radius:4px;
+        padding:4px 8px; font-size:11px;
+    }}
+"""
+STYLE_BTN_RUN = lambda color: f"""
+    QPushButton {{
+        background:{color}; color:#fff;
+        border:none; border-radius:5px;
+        padding:8px 0; font-size:12px; font-weight:bold;
+    }}
+    QPushButton:hover {{ background:{color}cc; }}
+    QPushButton:pressed {{ background:{color}99; }}
+"""
+STYLE_BTN_SMALL = f"""
+    QPushButton {{
+        background:{C['bg_card']}; color:{C['text_sub']};
+        border:1px solid {C['border']}; border-radius:4px;
+        padding:4px 10px; font-size:10px;
+    }}
+    QPushButton:hover {{ color:{C['text']}; border-color:{C['accent']}; }}
+"""
+STYLE_LIST = f"""
+    QListWidget {{
+        background:{C['bg_card']}; color:{C['text']};
+        border:1px solid {C['border']}; border-radius:4px;
+        font-size:10px; outline:none;
+    }}
+    QListWidget::item:selected {{
+        background:{C['bg_panel']}; color:{C['accent']};
+    }}
+    QListWidget::item:hover {{ background:{C['bg_panel']}; }}
+"""
+STYLE_GROUP = f"""
+    QGroupBox {{
+        color:{C['text_sub']}; border:1px solid {C['border']};
+        border-radius:5px; margin-top:8px; font-size:10px;
+        padding-top:6px;
+    }}
+    QGroupBox::title {{ subcontrol-origin:margin; left:8px; padding:0 4px; }}
+"""
+STYLE_CHECK = f"""
+    QCheckBox {{ color:{C['text']}; font-size:10px; spacing:6px; }}
+    QCheckBox::indicator {{
+        width:14px; height:14px; border:1px solid {C['border']};
+        border-radius:3px; background:{C['bg_card']};
+    }}
+    QCheckBox::indicator:checked {{ background:{C['accent']}; border-color:{C['accent']}; }}
+"""
 
-class InterfazLogisticaCusco:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("UNSAAC — Sistema de Rutas Óptimas · Cusco")
-        self.root.geometry("1440x860")
-        self.root.configure(bg=C["bg_app"])
-        self.root.resizable(True, True)
-        self.root.minsize(1100, 700)
+def lbl(text, color=None, bold=False, size=9, parent=None):
+    l = QLabel(text, parent)
+    st = f"color:{color or C['text_sub']}; font-size:{size}px;"
+    if bold: st += "font-weight:bold;"
+    l.setStyleSheet(st)
+    return l
 
-        # ── Datos ────────────────────────────────────────────────
-        self.nodos_datos = cargar_nodos()
-        self.G           = construir_grafo(self.nodos_datos, distancia_maxima=2500)
-        self.dicc_nodos  = {n["id"]: n for n in self.nodos_datos}
-        self.modulo_activo = None
-        self.nodo_hover    = None
-        self._foto_mapa    = None   # referencia PhotoImage para evitar GC
+def sep_h():
+    f = QFrame(); f.setFixedHeight(1)
+    f.setStyleSheet(f"background:{C['border']};")
+    return f
 
-        # ── Estado de animación ──────────────────────────────────
-        self._anim_nodos = {}       # {id: radio_actual}
-        self._anim_running = False
+# ─────────────────────────────────────────────────────────────────
+#  BRIDGE Qt ↔ JS
+# ─────────────────────────────────────────────────────────────────
+class Bridge(QObject):
+    nodo_clickeado = pyqtSignal(int)
 
-        self._construir_ui()
-        self.root.update()
-        self._cargar_mapa_fondo()
-        self.dibujar_grafo_base()
-        self._bind_canvas_eventos()
+    def __init__(self, app_ref):
+        super().__init__()
+        self._app = app_ref
+
+    @pyqtSlot(int)
+    def on_nodo_click(self, nodo_id):
+        self.nodo_clickeado.emit(nodo_id)
+
+    @pyqtSlot(result=str)
+    def get_nodos_json(self):
+        return json.dumps(self._app.nodos_datos)
+
+# ─────────────────────────────────────────────────────────────────
+#  VENTANA PRINCIPAL
+# ─────────────────────────────────────────────────────────────────
+class SistemaRutasCusco(QMainWindow):
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("UNSAAC — Sistema de Rutas Óptimas · Cusco  |  Programación III 2026")
+        self.resize(1500, 900)
+        self.setMinimumSize(1200, 720)
+        self._apply_theme()
+
+        self.nodos_datos   = cargar_nodos()
+        self.G             = construir_grafo(self.nodos_datos, distancia_maxima=2500)
+        self.dicc_nodos    = {n["id"]: n for n in self.nodos_datos}
+        self.pedidos       = cargar_pedidos()
+        self.modulo_activo = -1
+
+        # Estado de selección desde mapa (para backtracking)
+        self._click_mode   = None   # None | "inicio" | "destino" | "bloqueo"
+        self._bloqueos_sel = []     # lista de pares [u,v]
+
+        self._build_ui()
+
+        self.bridge  = Bridge(self)
+        self.channel = QWebChannel()
+        self.channel.registerObject("bridge", self.bridge)
+        self.mapa_view.page().setWebChannel(self.channel)
+        self.bridge.nodo_clickeado.connect(self._on_nodo_click_from_map)
+
+        self._load_map()
 
     # ════════════════════════════════════════════════════════════
-    #  UI PRINCIPAL
+    #  TEMA
     # ════════════════════════════════════════════════════════════
+    def _apply_theme(self):
+        self.setStyleSheet(f"""
+            QMainWindow, QWidget {{ background:{C['bg_app']}; color:{C['text']}; }}
+            QScrollBar:vertical {{ background:{C['bg_card']}; width:7px; border-radius:3px; }}
+            QScrollBar::handle:vertical {{ background:{C['border']}; border-radius:3px; min-height:20px; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
+            QScrollBar:horizontal {{ background:{C['bg_card']}; height:7px; border-radius:3px; }}
+            QScrollBar::handle:horizontal {{ background:{C['border']}; border-radius:3px; }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0; }}
+            QTextEdit {{ background:{C['bg_app']}; color:{C['green']};
+                         border:1px solid {C['border']}; border-radius:4px;
+                         font-family:Consolas,monospace; font-size:10px; padding:4px; }}
+            QToolTip {{ background:{C['bg_card']}; color:{C['text']};
+                        border:1px solid {C['border']}; padding:4px; }}
+        """)
 
-    def _construir_ui(self):
-        # ── Barra superior ───────────────────────────────────────
-        self._barra_top()
+    # ════════════════════════════════════════════════════════════
+    #  BUILD UI
+    # ════════════════════════════════════════════════════════════
+    def _build_ui(self):
+        root = QWidget(); self.setCentralWidget(root)
+        vlay = QVBoxLayout(root)
+        vlay.setContentsMargins(0,0,0,0); vlay.setSpacing(0)
 
-        # ── Cuerpo ───────────────────────────────────────────────
-        cuerpo = tk.Frame(self.root, bg=C["bg_app"])
-        cuerpo.pack(fill=tk.BOTH, expand=True)
+        vlay.addWidget(self._build_topbar())
+        vlay.addWidget(sep_h())
 
-        # Sidebar izquierdo
-        self.sidebar = tk.Frame(cuerpo, width=260, bg=C["bg_sidebar"])
-        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
-        self.sidebar.pack_propagate(False)
-        self._construir_sidebar(self.sidebar)
+        body = QHBoxLayout(); body.setContentsMargins(0,0,0,0); body.setSpacing(0)
 
-        # Área central (canvas)
-        centro = tk.Frame(cuerpo, bg=C["bg_canvas"])
-        centro.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self._construir_canvas(centro)
+        # Sidebar (módulos)
+        body.addWidget(self._build_sidebar())
+        body.addWidget(self._vsep())
 
-        # Panel derecho
-        self.panel_der = tk.Frame(cuerpo, width=300, bg=C["bg_sidebar"])
-        self.panel_der.pack(side=tk.RIGHT, fill=tk.Y)
-        self.panel_der.pack_propagate(False)
-        self._construir_panel_derecho(self.panel_der)
+        # Centro: mapa
+        body.addWidget(self._build_center(), stretch=1)
+        body.addWidget(self._vsep())
 
-    # ── Barra superior ───────────────────────────────────────────
-    def _barra_top(self):
-        barra = tk.Frame(self.root, bg=C["bg_panel"], height=52)
-        barra.pack(fill=tk.X)
-        barra.pack_propagate(False)
+        # Derecha: panel control + logs
+        body.addWidget(self._build_right())
 
-        # Borde inferior
-        borde = tk.Frame(self.root, bg=C["border"], height=1)
-        borde.pack(fill=tk.X)
+        wrap = QWidget(); wrap.setLayout(body)
+        vlay.addWidget(wrap, stretch=1)
 
-        # Icono + título
-        tk.Label(barra, text="  🗺", font=("Segoe UI", 18),
-                 fg=C["accent"], bg=C["bg_panel"]).pack(side=tk.LEFT, padx=(16,4), pady=8)
-        tk.Label(barra, text="Sistema de Gestión de Rutas Óptimas — Cusco",
-                 font=("Segoe UI", 13, "bold"), fg=C["text_main"],
-                 bg=C["bg_panel"]).pack(side=tk.LEFT, pady=8)
-        tk.Label(barra, text="Universidad Nacional de San Antonio Abad del Cusco · Programación III",
-                 font=("Segoe UI", 8), fg=C["text_sub"],
-                 bg=C["bg_panel"]).pack(side=tk.LEFT, padx=16, pady=8)
+    def _vsep(self):
+        f = QFrame(); f.setFixedWidth(1)
+        f.setStyleSheet(f"background:{C['border']};"); return f
 
-        # Badges derecha
-        for txt, col in [("v1.0", C["accent"]), ("2026", C["accent2"])]:
-            lbl = tk.Label(barra, text=f" {txt} ", font=("Consolas", 9, "bold"),
-                           fg="white", bg=col, padx=6, pady=2)
-            lbl.pack(side=tk.RIGHT, padx=4, pady=14)
+    # ── TOPBAR ───────────────────────────────────────────────────
+    def _build_topbar(self):
+        bar = QFrame(); bar.setFixedHeight(50)
+        bar.setStyleSheet(f"background:{C['bg_panel']};")
+        lay = QHBoxLayout(bar); lay.setContentsMargins(16,0,16,0)
 
-        # Stats rápidas
-        self.lbl_stats = tk.Label(barra,
-            text=f"  Nodos: {self.G.number_of_nodes()}  │  Aristas: {self.G.number_of_edges()}  │  Pedidos: 25  ",
-            font=("Consolas", 9), fg=C["text_sub"], bg=C["bg_panel"])
-        self.lbl_stats.pack(side=tk.RIGHT, padx=8)
+        ico = QLabel("🗺"); ico.setFont(QFont("Segoe UI",16))
+        ico.setStyleSheet(f"color:{C['accent']};"); lay.addWidget(ico)
 
-    # ── Sidebar ──────────────────────────────────────────────────
-    def _construir_sidebar(self, parent):
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X)
+        t = QLabel("  Sistema de Gestión de Rutas Óptimas — Cusco")
+        t.setFont(QFont("Segoe UI",12,QFont.Bold))
+        t.setStyleSheet(f"color:{C['text']};"); lay.addWidget(t)
 
-        # Logo sección
-        tk.Label(parent, text="MÓDULOS", font=("Segoe UI", 9, "bold"),
-                 fg=C["text_dim"], bg=C["bg_sidebar"],
-                 anchor=tk.W).pack(fill=tk.X, padx=20, pady=(18, 6))
+        s = QLabel("  UNSAAC · Programación III · 2026")
+        s.setFont(QFont("Segoe UI",8))
+        s.setStyleSheet(f"color:{C['text_sub']};"); lay.addWidget(s)
+        lay.addStretch()
 
-        # Botones de módulos
-        self.btns_modulo = []
+        stats = QLabel(f"Nodos: {self.G.number_of_nodes()}  │  "
+                       f"Aristas: {self.G.number_of_edges()}  │  "
+                       f"Pedidos: {len(self.pedidos)}")
+        stats.setFont(QFont("Consolas",9))
+        stats.setStyleSheet(f"color:{C['text_sub']};"); lay.addWidget(stats)
+
+        for txt,col in [("v2.0",C["accent"]),("2026",C["green"])]:
+            b = QLabel(f"  {txt}  "); b.setFont(QFont("Consolas",9,QFont.Bold))
+            b.setStyleSheet(f"background:{col};color:#fff;border-radius:3px;padding:2px 6px;")
+            lay.addWidget(b)
+        return bar
+
+    # ── SIDEBAR ──────────────────────────────────────────────────
+    def _build_sidebar(self):
+        side = QFrame(); side.setFixedWidth(240)
+        side.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(side); lay.setContentsMargins(0,0,0,0); lay.setSpacing(0)
+
+        lay.addWidget(sep_h())
+        hdr = QLabel("  MÓDULOS"); hdr.setFont(QFont("Segoe UI",9,QFont.Bold))
+        hdr.setStyleSheet(f"color:{C['text_dim']};padding:16px 20px 8px;"); lay.addWidget(hdr)
+
         acciones = [
-            self.ejecutar_ordenamiento,
-            self.ejecutar_divide_y_venceras,
-            self.ejecutar_backtracking,
-            self.ejecutar_mochila,
-            self.ejecutar_greedy,
+            self._show_panel_ordenamiento,
+            self._show_panel_greedy,
+            self._show_panel_divide,
+            self._show_panel_mochila,
+            self._show_panel_backtracking,
         ]
-        for i, ((ico, nombre, sub, color, bigo), cmd) in enumerate(zip(MODULOS, acciones)):
-            btn_frame = tk.Frame(parent, bg=C["bg_sidebar"], cursor="hand2")
-            btn_frame.pack(fill=tk.X, padx=10, pady=2)
+        self.btn_mods = []
+        for i, ((ico,nom,sub,col,bigo), cmd) in enumerate(zip(MODULOS, acciones)):
+            btn = self._mod_btn(i, ico, nom, sub, col, bigo, cmd)
+            lay.addWidget(btn); self.btn_mods.append((btn, col))
 
-            indicador = tk.Frame(btn_frame, width=4, bg=C["bg_sidebar"])
-            indicador.pack(side=tk.LEFT, fill=tk.Y)
+        lay.addWidget(sep_h())
+        lay.addSpacing(8)
 
-            contenido = tk.Frame(btn_frame, bg=C["bg_sidebar"], padx=12, pady=10)
-            contenido.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-            fila1 = tk.Frame(contenido, bg=C["bg_sidebar"])
-            fila1.pack(fill=tk.X)
-            tk.Label(fila1, text=f"{ico}  {nombre}", font=("Segoe UI", 10, "bold"),
-                     fg=C["text_main"], bg=C["bg_sidebar"], anchor=tk.W).pack(side=tk.LEFT)
-            tk.Label(fila1, text=bigo, font=("Consolas", 8),
-                     fg=color, bg=C["bg_sidebar"]).pack(side=tk.RIGHT)
-
-            tk.Label(contenido, text=sub, font=("Segoe UI", 8),
-                     fg=C["text_sub"], bg=C["bg_sidebar"], anchor=tk.W).pack(fill=tk.X)
-
-            # Hover y click
-            widgets = [btn_frame, indicador, contenido, fila1]
-            for w in btn_frame.winfo_children() + [btn_frame]:
-                pass
-
-            def _make_handler(frame, ind, idx, color, cmd):
-                def on_enter(e):
-                    frame.config(bg=C["bg_card"])
-                    for c in frame.winfo_children():
-                        self._bg_rec(c, C["bg_card"])
-                    ind.config(bg=color)
-                def on_leave(e):
-                    bg = C["bg_panel"] if self.modulo_activo == idx else C["bg_sidebar"]
-                    frame.config(bg=bg)
-                    for c in frame.winfo_children():
-                        self._bg_rec(c, bg)
-                    ind.config(bg=color if self.modulo_activo == idx else C["bg_sidebar"])
-                def on_click(e):
-                    self._seleccionar_modulo(idx, frame, ind, color)
-                    cmd()
-                return on_enter, on_leave, on_click
-
-            on_e, on_l, on_c = _make_handler(btn_frame, indicador, i, color, cmd)
-            for w in [btn_frame, contenido, fila1] + list(fila1.winfo_children()) + list(contenido.winfo_children()):
-                w.bind("<Enter>", on_e)
-                w.bind("<Leave>", on_l)
-                w.bind("<Button-1>", on_c)
-
-            self.btns_modulo.append((btn_frame, indicador, color))
-
-        # Separador
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X, padx=10, pady=16)
-        tk.Label(parent, text="INFORMACIÓN", font=("Segoe UI", 9, "bold"),
-                 fg=C["text_dim"], bg=C["bg_sidebar"], anchor=tk.W).pack(fill=tk.X, padx=20, pady=(0,8))
-
-        info_lines = [
-            ("Docentes:", C["text_sub"]),
-            ("M.Sc. Hector E. Ugarte R.", C["text_main"]),
-            ("M.Sc. Boris Chullo Llave", C["text_main"]),
-            ("", C["text_sub"]),
-            ("Entrega: 28 mayo 2026", C["accent3"]),
-        ]
-        for txt, col in info_lines:
-            tk.Label(parent, text=txt, font=("Segoe UI", 8),
-                     fg=col, bg=C["bg_sidebar"], anchor=tk.W).pack(fill=tk.X, padx=20)
-
-        # Botón reset
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X, padx=10, pady=12)
-        btn_reset = tk.Button(parent, text="↺  Reiniciar Mapa",
-                              font=("Segoe UI", 9), fg=C["text_sub"],
-                              bg=C["bg_card"], activebackground=C["bg_panel"],
-                              activeforeground=C["text_main"],
-                              bd=0, padx=14, pady=8, cursor="hand2",
-                              command=self._reset_mapa)
-        btn_reset.pack(fill=tk.X, padx=10, pady=4)
-
-    def _bg_rec(self, widget, color):
-        try:
-            widget.config(bg=color)
-        except Exception:
-            pass
-        for child in widget.winfo_children():
-            self._bg_rec(child, color)
-
-    def _seleccionar_modulo(self, idx, frame, ind, color):
-        # Desactivar anterior
-        if self.modulo_activo is not None and self.modulo_activo != idx:
-            prev_frame, prev_ind, prev_color = self.btns_modulo[self.modulo_activo]
-            prev_frame.config(bg=C["bg_sidebar"])
-            self._bg_rec(prev_frame, C["bg_sidebar"])
-            prev_ind.config(bg=C["bg_sidebar"])
-        self.modulo_activo = idx
-        frame.config(bg=C["bg_panel"])
-        self._bg_rec(frame, C["bg_panel"])
-        ind.config(bg=color)
-
-    # ── Canvas central ───────────────────────────────────────────
-    def _construir_canvas(self, parent):
-        # Barra de título del mapa
-        barra_mapa = tk.Frame(parent, bg=C["bg_panel"], height=38)
-        barra_mapa.pack(fill=tk.X)
-        barra_mapa.pack_propagate(False)
-
-        self.lbl_titulo_mapa = tk.Label(barra_mapa,
-            text="  📍  Grafo de Cusco — Nodos y Aristas",
-            font=("Segoe UI", 10, "bold"), fg=C["text_main"], bg=C["bg_panel"],
-            anchor=tk.W)
-        self.lbl_titulo_mapa.pack(side=tk.LEFT, fill=tk.Y, padx=8)
-
-        self.lbl_badge_mapa = tk.Label(barra_mapa,
-            text=" Estructura: Grafo Ponderado No Dirigido ",
-            font=("Consolas", 8), fg=C["accent2"], bg="#0d2818",
-            padx=6, pady=2)
-        self.lbl_badge_mapa.pack(side=tk.RIGHT, padx=12, pady=7)
-
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X)
-
-        # Canvas
-        self.canvas = tk.Canvas(parent, bg=C["bg_canvas"], highlightthickness=0,
-                                 cursor="crosshair")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        # Leyenda inferior
-        leyenda = tk.Frame(parent, bg=C["bg_panel"], height=30)
-        leyenda.pack(fill=tk.X)
-        leyenda.pack_propagate(False)
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X)
-
-        items = [
-            ("●", "#f39c12", " Nodo normal"),
-            ("●", C["accent2"], " Inicio de ruta"),
-            ("●", C["accent4"], " En ruta activa"),
-            ("—", C["border"], " Arista normal"),
-            ("- -", C["accent4"], " Arista bloqueada"),
-        ]
-        for sym, col, desc in items:
-            tk.Label(leyenda, text=sym, fg=col, bg=C["bg_panel"],
-                     font=("Consolas", 10, "bold")).pack(side=tk.LEFT, padx=(10,0))
-            tk.Label(leyenda, text=desc, fg=C["text_sub"], bg=C["bg_panel"],
-                     font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(0,6))
-
-        # Tooltip flotante
-        self.tooltip = tk.Label(self.root, text="", font=("Segoe UI", 8),
-                                 fg=C["text_main"], bg=C["bg_card"],
-                                 bd=1, relief=tk.FLAT, padx=8, pady=4)
-
-    # ── Panel derecho ────────────────────────────────────────────
-    def _construir_panel_derecho(self, parent):
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X)
-
-        # Big-O section
-        tk.Label(parent, text="COMPLEJIDAD BIG-O", font=("Segoe UI", 9, "bold"),
-                 fg=C["text_dim"], bg=C["bg_sidebar"],
-                 anchor=tk.W).pack(fill=tk.X, padx=16, pady=(16, 8))
-
-        bigo_data = [
-            ("Ordenación (Gnome/Comb/Shell)", C["mod_orden"],
-             "Tiempo: O(n²) / O(n log²n)", "Espacio: O(1)",
-             "Algoritmos in-place, sin memoria extra"),
-            ("Greedy — Vec. Cercano", C["mod_greedy"],
-             "Tiempo: O(n²)", "Espacio: O(n)",
-             "Buena aproximación, no garantiza óptimo"),
-            ("Divide y Vencerás", C["mod_divide"],
-             "Tiempo: O(n log n)", "Espacio: O(n log n)",
-             "Paralelizable por zonas geográficas"),
-            ("Programación Dinámica", C["mod_dp"],
-             "Tiempo: O(n × W)", "Espacio: O(n × W)",
-             "Óptimo global garantizado"),
-            ("Backtracking", C["mod_back"],
-             "Tiempo: O(V!)", "Espacio: O(V)",
-             "Exhaustivo, práctico solo para grafos pequeños"),
-        ]
-
-        for nombre, color, t1, t2, nota in bigo_data:
-            card = tk.Frame(parent, bg=C["bg_card"], pady=8, padx=12)
-            card.pack(fill=tk.X, padx=10, pady=3)
-            tk.Frame(card, bg=color, width=3, height=48).pack(side=tk.LEFT, fill=tk.Y, padx=(0,10))
-            cuerpo_card = tk.Frame(card, bg=C["bg_card"])
-            cuerpo_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            tk.Label(cuerpo_card, text=nombre, font=("Segoe UI", 8, "bold"),
-                     fg=color, bg=C["bg_card"], anchor=tk.W).pack(fill=tk.X)
-            tk.Label(cuerpo_card, text=t1, font=("Consolas", 8),
-                     fg=C["accent"], bg=C["bg_card"], anchor=tk.W).pack(fill=tk.X)
-            tk.Label(cuerpo_card, text=t2, font=("Consolas", 8),
-                     fg=C["accent5"], bg=C["bg_card"], anchor=tk.W).pack(fill=tk.X)
-            tk.Label(cuerpo_card, text=nota, font=("Segoe UI", 7),
-                     fg=C["text_sub"], bg=C["bg_card"], anchor=tk.W).pack(fill=tk.X)
-
-        # Separador
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X, padx=10, pady=10)
-
-        # Panel de resultados
-        tk.Label(parent, text="ÚLTIMOS RESULTADOS", font=("Segoe UI", 9, "bold"),
-                 fg=C["text_dim"], bg=C["bg_sidebar"],
-                 anchor=tk.W).pack(fill=tk.X, padx=16, pady=(0, 6))
-
-        frame_log = tk.Frame(parent, bg=C["bg_sidebar"])
-        frame_log.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 8))
-
-        sb = tk.Scrollbar(frame_log, bg=C["bg_card"])
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.txt_logs = tk.Text(frame_log, bg=C["bg_canvas"], fg=C["accent2"],
-                                 font=("Consolas", 8), wrap=tk.WORD,
-                                 bd=0, highlightthickness=1,
-                                 highlightbackground=C["border"],
-                                 yscrollcommand=sb.set,
-                                 insertbackground=C["accent"],
-                                 selectbackground=C["bg_card"])
-        self.txt_logs.pack(fill=tk.BOTH, expand=True)
-        sb.config(command=self.txt_logs.yview)
-
-        # Resumen del grafo
-        tk.Frame(parent, bg=C["border"], height=1).pack(fill=tk.X, padx=10, pady=4)
-        resumen = tk.Frame(parent, bg=C["bg_sidebar"])
-        resumen.pack(fill=tk.X, padx=10, pady=(0, 10))
-        tk.Label(resumen, text="RESUMEN DEL GRAFO", font=("Segoe UI", 8, "bold"),
-                 fg=C["text_dim"], bg=C["bg_sidebar"],
-                 anchor=tk.W).pack(fill=tk.X, pady=(4,2))
-        for txt in [
-            f"Nodos: {self.G.number_of_nodes()}",
-            f"Aristas: {self.G.number_of_edges()}",
-            f"Distancia máx: 2 500 m",
-            f"Fórmula: Haversine (WGS84)",
+        info_hdr = QLabel("  DOCENTES"); info_hdr.setFont(QFont("Segoe UI",9,QFont.Bold))
+        info_hdr.setStyleSheet(f"color:{C['text_dim']};padding:4px 20px;"); lay.addWidget(info_hdr)
+        for txt,col2 in [
+            ("M.Sc. Hector E. Ugarte R.", C["text"]),
+            ("M.Sc. Boris Chullo Llave",  C["text"]),
+            ("Entrega: 28 mayo 2026",     C["yellow"]),
         ]:
-            tk.Label(resumen, text=txt, font=("Consolas", 8),
-                     fg=C["text_sub"], bg=C["bg_sidebar"],
-                     anchor=tk.W).pack(fill=tk.X)
+            l = QLabel(f"  {txt}"); l.setFont(QFont("Segoe UI",8))
+            l.setStyleSheet(f"color:{col2};padding:2px 20px;"); lay.addWidget(l)
 
-        self._log("Sistema iniciado.\nSelecciona un módulo para ver resultados.")
+        lay.addStretch()
+        lay.addWidget(sep_h())
+        btn_r = QPushButton("↺  Reiniciar mapa")
+        btn_r.setStyleSheet(STYLE_BTN_SMALL + "QPushButton{margin:8px 10px;}")
+        btn_r.clicked.connect(self._reset_mapa); lay.addWidget(btn_r)
+        lay.addSpacing(8)
+        return side
 
-    # ════════════════════════════════════════════════════════════
-    #  MAPA
-    # ════════════════════════════════════════════════════════════
+    def _mod_btn(self, idx, ico, nom, sub, col, bigo, cmd):
+        fr = QFrame(); fr.setFixedHeight(60); fr.setCursor(Qt.PointingHandCursor)
+        fr.setStyleSheet(f"background:{C['bg_side']};border:none;")
+        lay = QHBoxLayout(fr); lay.setContentsMargins(0,0,0,0); lay.setSpacing(0)
 
-    def _cargar_mapa_fondo(self):
-        """Genera y carga la imagen de mapa de fondo en el canvas."""
-        try:
-            from PIL import Image, ImageTk
-            from gui.mapa_cusco import generar_mapa
+        ind = QFrame(); ind.setFixedWidth(4)
+        ind.setStyleSheet(f"background:{C['bg_side']};"); lay.addWidget(ind)
 
-            ancho = self.canvas.winfo_width()  or 880
-            alto  = self.canvas.winfo_height() or 660
+        cnt = QWidget(); cnt.setStyleSheet("background:transparent;")
+        clay = QVBoxLayout(cnt); clay.setContentsMargins(12,8,12,8); clay.setSpacing(2)
 
-            img = generar_mapa(ancho, alto)
-            self._foto_mapa = ImageTk.PhotoImage(img)
-            self.canvas.create_image(0, 0, anchor=tk.NW,
-                                      image=self._foto_mapa, tags="fondo")
-            self.canvas.tag_lower("fondo")
-        except Exception as e:
-            # Si PIL falla, dibujamos fondo simple con cuadrícula
-            self._dibujar_fondo_simple()
+        r1 = QHBoxLayout(); r1.setContentsMargins(0,0,0,0)
+        ln = QLabel(f"{ico}  {nom}"); ln.setFont(QFont("Segoe UI",10,QFont.Bold))
+        ln.setStyleSheet(f"color:{C['text']};"); r1.addWidget(ln); r1.addStretch()
+        lb = QLabel(bigo); lb.setFont(QFont("Consolas",8))
+        lb.setStyleSheet(f"color:{col};"); r1.addWidget(lb)
+        clay.addLayout(r1)
 
-    def _dibujar_fondo_simple(self):
-        """Fondo alternativo sin PIL."""
-        ancho = self.canvas.winfo_width()  or 880
-        alto  = self.canvas.winfo_height() or 660
-        self.canvas.create_rectangle(0, 0, ancho, alto, fill=C["bg_canvas"], outline="")
-        for xi in range(0, ancho, 40):
-            self.canvas.create_line(xi, 0, xi, alto, fill="#161b22", width=1)
-        for yi in range(0, alto, 40):
-            self.canvas.create_line(0, yi, ancho, yi, fill="#161b22", width=1)
+        ls = QLabel(sub); ls.setFont(QFont("Segoe UI",8))
+        ls.setStyleSheet(f"color:{C['text_sub']};"); clay.addWidget(ls)
+        lay.addWidget(cnt, stretch=1)
 
-    def _coords(self, lat, lon):
-        """Convierte lat/lon a píxeles en el canvas."""
-        lats = [n["lat"] for n in self.nodos_datos]
-        lons = [n["lon"] for n in self.nodos_datos]
-        ancho = self.canvas.winfo_width()  or 880
-        alto  = self.canvas.winfo_height() or 660
-        mg = 70
-        x = mg + (lon - min(lons)) / (max(lons) - min(lons)) * (ancho - mg*2)
-        y = (alto - mg) - (lat - min(lats)) / (max(lats) - min(lats)) * (alto - mg*2)
-        return int(x), int(y)
+        fr._ind = ind; fr._col = col; fr._idx = idx
 
-    def dibujar_grafo_base(self, conservar_fondo=False):
-        """Dibuja el grafo sobre el mapa de fondo."""
-        if not conservar_fondo:
-            self.canvas.delete("grafo")
-            self.canvas.delete("nodo")
-            self.canvas.delete("etiqueta")
-            self.canvas.delete("arista")
-        else:
-            self.canvas.delete("grafo")
-            self.canvas.delete("nodo")
-            self.canvas.delete("etiqueta")
-            self.canvas.delete("arista")
+        def _enter(e,f=fr,i=ind,c=col): f.setStyleSheet(f"background:{C['bg_card']};border:none;"); i.setStyleSheet(f"background:{c};")
+        def _leave(e,f=fr,i=ind,c=col,n=idx):
+            bg = C["bg_panel"] if self.modulo_activo==n else C["bg_side"]
+            f.setStyleSheet(f"background:{bg};border:none;")
+            i.setStyleSheet(f"background:{c if self.modulo_activo==n else C['bg_side']};")
+        def _click(e,n=idx,f=fr,i=ind,c=col,fn=cmd): self._activar_mod(n); fn()
 
-        # Aristas
-        for u, v, datos in self.G.edges(data=True):
-            x1, y1 = self._coords(self.dicc_nodos[u]["lat"], self.dicc_nodos[u]["lon"])
-            x2, y2 = self._coords(self.dicc_nodos[v]["lat"], self.dicc_nodos[v]["lon"])
-            self.canvas.create_line(x1, y1, x2, y2, fill="#2d3748", width=1.5,
-                                     smooth=True, tags="arista")
-            # Distancia en la arista
-            mx, my = (x1+x2)//2, (y1+y2)//2
-            self.canvas.create_text(mx, my, text=f"{int(datos['peso'])}m",
-                                     font=("Segoe UI", 6), fill="#4a5568", tags="arista")
+        fr.enterEvent=_enter; fr.leaveEvent=_leave; fr.mousePressEvent=_click
+        return fr
 
-        # Nodos
-        for nodo in self.nodos_datos:
-            self._dibujar_nodo(nodo, radio=7, color="#f39c12", tag="nodo")
+    def _activar_mod(self, idx):
+        if self.modulo_activo >= 0:
+            prev, pc = self.btn_mods[self.modulo_activo]
+            prev.setStyleSheet(f"background:{C['bg_side']};border:none;")
+            prev._ind.setStyleSheet(f"background:{C['bg_side']};")
+        self.modulo_activo = idx
+        btn, col = self.btn_mods[idx]
+        btn.setStyleSheet(f"background:{C['bg_panel']};border:none;")
+        btn._ind.setStyleSheet(f"background:{col};")
 
-    def _dibujar_nodo(self, nodo, radio=7, color="#f39c12", tag="nodo",
-                       outline="white", outline_w=1.5, texto_color=C["text_main"]):
-        x, y = self._coords(nodo["lat"], nodo["lon"])
-        nid  = nodo["id"]
+    # ── CENTRO (MAPA) ─────────────────────────────────────────────
+    def _build_center(self):
+        fr = QFrame(); fr.setStyleSheet(f"background:{C['bg_app']};")
+        lay = QVBoxLayout(fr); lay.setContentsMargins(0,0,0,0); lay.setSpacing(0)
 
-        # Halo exterior
-        self.canvas.create_oval(x-radio-3, y-radio-3, x+radio+3, y+radio+3,
-                                 fill="", outline=color, width=1,
-                                 stipple="gray25", tags=tag)
-        # Círculo principal
-        self.canvas.create_oval(x-radio, y-radio, x+radio, y+radio,
-                                 fill=color, outline=outline, width=outline_w,
-                                 tags=(tag, f"nodo_{nid}"))
-        # ID del nodo dentro
-        self.canvas.create_text(x, y, text=str(nid),
-                                 font=("Consolas", 6, "bold"),
-                                 fill="black", tags=(tag, f"nodo_{nid}"))
-        # Etiqueta exterior
-        self.canvas.create_rectangle(x-30, y-radio-18, x+30, y-radio-6,
-                                      fill="#0d1117cc" if True else "#0d1117",
-                                      outline="", tags="etiqueta")
-        self.canvas.create_text(x, y-radio-12,
-                                 text=nodo["nombre"],
-                                 font=("Segoe UI", 7, "bold"),
-                                 fill=texto_color, tags="etiqueta")
+        # Título mapa
+        bar = QFrame(); bar.setFixedHeight(36)
+        bar.setStyleSheet(f"background:{C['bg_panel']};")
+        blay = QHBoxLayout(bar); blay.setContentsMargins(12,0,12,0)
+        self.lbl_mapa = QLabel("📍  Mapa Interactivo — Cusco (OpenStreetMap)")
+        self.lbl_mapa.setFont(QFont("Segoe UI",10,QFont.Bold))
+        self.lbl_mapa.setStyleSheet(f"color:{C['text']};"); blay.addWidget(self.lbl_mapa)
+        blay.addStretch()
+        self.lbl_click_mode = QLabel("")
+        self.lbl_click_mode.setFont(QFont("Segoe UI",9))
+        self.lbl_click_mode.setStyleSheet(f"color:{C['yellow']};"); blay.addWidget(self.lbl_click_mode)
+        bk = QLabel("  Haversine WGS-84 · NetworkX  ")
+        bk.setFont(QFont("Consolas",8))
+        bk.setStyleSheet(f"background:#0d2818;color:{C['green']};border-radius:3px;padding:2px 6px;")
+        blay.addWidget(bk); lay.addWidget(bar); lay.addWidget(sep_h())
+
+        self.mapa_view = QWebEngineView()
+        self.mapa_view.settings().setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        self.mapa_view.settings().setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+        lay.addWidget(self.mapa_view, stretch=1)
+
+        # Leyenda
+        leg = QFrame(); leg.setFixedHeight(28)
+        leg.setStyleSheet(f"background:{C['bg_panel']};")
+        llay = QHBoxLayout(leg); llay.setContentsMargins(12,0,12,0); llay.setSpacing(0)
+        for sym,col,desc in [("●","#e74c3c"," Nodo"),("●",C["green"]," Inicio"),
+                              ("●",C["accent"]," Destino"),("●",C["orange"]," Ruta activa"),
+                              ("●","#9b59b6"," Zona 2"),("✖",C["red"]," Bloqueado")]:
+            s=QLabel(sym); s.setFont(QFont("Consolas",11)); s.setStyleSheet(f"color:{col};"); llay.addWidget(s)
+            d=QLabel(desc); d.setFont(QFont("Segoe UI",8))
+            d.setStyleSheet(f"color:{C['text_sub']};padding-right:10px;"); llay.addWidget(d)
+        llay.addStretch()
+        lay.addWidget(sep_h()); lay.addWidget(leg)
+        return fr
+
+    # ── PANEL DERECHO ─────────────────────────────────────────────
+    def _build_right(self):
+        fr = QFrame(); fr.setFixedWidth(340)
+        fr.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(fr); lay.setContentsMargins(0,0,0,0); lay.setSpacing(0)
+        lay.addWidget(sep_h())
+
+        # ── Stack de paneles de control por módulo ────────────────
+        hdr_ctrl = QLabel("  PANEL DE CONTROL"); hdr_ctrl.setFont(QFont("Segoe UI",9,QFont.Bold))
+        hdr_ctrl.setStyleSheet(f"color:{C['text_dim']};padding:12px 16px 6px;"); lay.addWidget(hdr_ctrl)
+
+        self.stack = QStackedWidget()
+        self.stack.setStyleSheet(f"background:{C['bg_side']};")
+        self.stack.addWidget(self._panel_bienvenida())  # 0
+        self.stack.addWidget(self._panel_ordenamiento()) # 1
+        self.stack.addWidget(self._panel_greedy())       # 2
+        self.stack.addWidget(self._panel_divide())       # 3
+        self.stack.addWidget(self._panel_mochila())      # 4
+        self.stack.addWidget(self._panel_backtracking()) # 5
+        lay.addWidget(self.stack)
+
+        lay.addWidget(sep_h())
+
+        # ── Resultados ────────────────────────────────────────────
+        hdr_res = QLabel("  RESULTADOS"); hdr_res.setFont(QFont("Segoe UI",9,QFont.Bold))
+        hdr_res.setStyleSheet(f"color:{C['text_dim']};padding:8px 16px 4px;"); lay.addWidget(hdr_res)
+
+        self.txt_log = QTextEdit()
+        self.txt_log.setReadOnly(True)
+        self.txt_log.setFont(QFont("Consolas",9))
+        self.txt_log.setStyleSheet(f"""
+            QTextEdit{{background:{C['bg_app']};color:{C['green']};
+                       border:1px solid {C['border']};border-radius:4px;
+                       padding:6px;margin:4px 10px;}}
+        """)
+        self.txt_log.setText("Sistema iniciado.\nSelecciona un módulo del panel izquierdo.")
+        lay.addWidget(self.txt_log, stretch=1)
+
+        lay.addWidget(sep_h())
+        # Resumen grafo
+        for txt in [f"  Nodos: {self.G.number_of_nodes()}  │  Aristas: {self.G.number_of_edges()}  │  Pedidos: {len(self.pedidos)}"]:
+            l=QLabel(txt); l.setFont(QFont("Consolas",8))
+            l.setStyleSheet(f"color:{C['text_dim']};padding:4px 16px;"); lay.addWidget(l)
+        lay.addSpacing(4)
+        return fr
+
+    # ────────────────────────────────────────────────────────────
+    #  PANELES DE CONTROL POR MÓDULO
+    # ────────────────────────────────────────────────────────────
+
+    def _panel_bienvenida(self):
+        w = QWidget(); w.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(16,12,16,12)
+        l = QLabel("← Selecciona un módulo\npara ver sus opciones.")
+        l.setFont(QFont("Segoe UI",10)); l.setStyleSheet(f"color:{C['text_sub']};")
+        l.setAlignment(Qt.AlignCenter); lay.addWidget(l); lay.addStretch()
+        return w
+
+    # ── PANEL ORDENAMIENTOS ──────────────────────────────────────
+    def _panel_ordenamiento(self):
+        w = QWidget(); w.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,8,12,8); lay.setSpacing(8)
+
+        # Criterio
+        grp = QGroupBox("Criterio de ordenación"); grp.setStyleSheet(STYLE_GROUP)
+        glay = QVBoxLayout(grp); glay.setSpacing(4)
+        self.combo_orden_criterio = QComboBox()
+        self.combo_orden_criterio.addItems([
+            "Prioridad  (Gnome Sort — O(n²))",
+            "Peso kg    (Comb Sort — O(n log²n))",
+            "Valor S/.  (Shell Sort — O(n log²n))",
+            "Todos (comparar los 3)",
+        ])
+        self.combo_orden_criterio.setStyleSheet(STYLE_COMBO)
+        glay.addWidget(self.combo_orden_criterio)
+        lay.addWidget(grp)
+
+        # Nodos a resaltar
+        grp2 = QGroupBox("Resaltar en mapa"); grp2.setStyleSheet(STYLE_GROUP)
+        glay2 = QVBoxLayout(grp2); glay2.setSpacing(4)
+        self.combo_orden_campo = QComboBox()
+        self.combo_orden_campo.addItems(["Nodos Origen", "Nodos Destino", "Ambos"])
+        self.combo_orden_campo.setStyleSheet(STYLE_COMBO)
+        glay2.addWidget(self.combo_orden_campo)
+        lay.addWidget(grp2)
+
+        # Búsqueda
+        grp3 = QGroupBox("Búsqueda rápida"); grp3.setStyleSheet(STYLE_GROUP)
+        glay3 = QVBoxLayout(grp3); glay3.setSpacing(4)
+        glay3.addWidget(lbl("Buscar por ID de pedido:"))
+        self.spin_buscar_id = QSpinBox()
+        self.spin_buscar_id.setRange(1, 25); self.spin_buscar_id.setValue(1)
+        self.spin_buscar_id.setStyleSheet(STYLE_SPIN)
+        glay3.addWidget(self.spin_buscar_id)
+        btn_buscar = QPushButton("🔍  Buscar pedido")
+        btn_buscar.setStyleSheet(STYLE_BTN_SMALL)
+        btn_buscar.clicked.connect(self._buscar_pedido)
+        glay3.addWidget(btn_buscar)
+        lay.addWidget(grp3)
+
+        lay.addStretch()
+        btn = QPushButton("▶  Ejecutar ordenamiento")
+        btn.setStyleSheet(STYLE_BTN_RUN(C["purple"]))
+        btn.clicked.connect(self.ejecutar_ordenamiento); lay.addWidget(btn)
+        return w
+
+    # ── PANEL GREEDY ─────────────────────────────────────────────
+    def _panel_greedy(self):
+        w = QWidget(); w.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,8,12,8); lay.setSpacing(8)
+
+        grp = QGroupBox("Punto de inicio del repartidor"); grp.setStyleSheet(STYLE_GROUP)
+        glay = QVBoxLayout(grp); glay.setSpacing(4)
+        glay.addWidget(lbl("Nodo de inicio:"))
+        self.combo_greedy_inicio = QComboBox()
+        self.combo_greedy_inicio.setStyleSheet(STYLE_COMBO)
+        for n in self.nodos_datos:
+            self.combo_greedy_inicio.addItem(f"[{n['id']:2}] {n['nombre']}", n["id"])
+        glay.addWidget(self.combo_greedy_inicio)
+        lay.addWidget(grp)
+
+        grp2 = QGroupBox("Cantidad de pedidos"); grp2.setStyleSheet(STYLE_GROUP)
+        glay2 = QVBoxLayout(grp2); glay2.setSpacing(4)
+        glay2.addWidget(lbl("Primeros N pedidos a repartir:"))
+        self.spin_greedy_n = QSpinBox()
+        self.spin_greedy_n.setRange(1, len(self.pedidos))
+        self.spin_greedy_n.setValue(8)
+        self.spin_greedy_n.setStyleSheet(STYLE_SPIN)
+        glay2.addWidget(self.spin_greedy_n)
+        lay.addWidget(grp2)
+
+        grp3 = QGroupBox("Pedido urgente (asignación)"); grp3.setStyleSheet(STYLE_GROUP)
+        glay3 = QVBoxLayout(grp3); glay3.setSpacing(4)
+        glay3.addWidget(lbl("Pedido urgente a asignar:"))
+        self.combo_greedy_urgente = QComboBox()
+        self.combo_greedy_urgente.setStyleSheet(STYLE_COMBO)
+        for p in self.pedidos:
+            self.combo_greedy_urgente.addItem(
+                f"#{p['id']} {p['cliente']} (P{p['prioridad']})", p["id"])
+        glay3.addWidget(self.combo_greedy_urgente)
+        lay.addWidget(grp3)
+
+        lay.addStretch()
+        btn = QPushButton("▶  Ejecutar Greedy")
+        btn.setStyleSheet(STYLE_BTN_RUN(C["orange"]))
+        btn.clicked.connect(self.ejecutar_greedy); lay.addWidget(btn)
+        return w
+
+    # ── PANEL DIVIDE Y VENCERÁS ──────────────────────────────────
+    def _panel_divide(self):
+        w = QWidget(); w.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,8,12,8); lay.setSpacing(8)
+
+        grp = QGroupBox("Configuración de repartidores"); grp.setStyleSheet(STYLE_GROUP)
+        glay = QVBoxLayout(grp); glay.setSpacing(4)
+        glay.addWidget(lbl("Número de repartidores (zonas):"))
+        self.spin_divide_reps = QSpinBox()
+        self.spin_divide_reps.setRange(2, 4); self.spin_divide_reps.setValue(3)
+        self.spin_divide_reps.setStyleSheet(STYLE_SPIN)
+        glay.addWidget(self.spin_divide_reps)
+        glay.addWidget(lbl("Profundidad de división recursiva:"))
+        self.spin_divide_prof = QSpinBox()
+        self.spin_divide_prof.setRange(1, 3); self.spin_divide_prof.setValue(2)
+        self.spin_divide_prof.setStyleSheet(STYLE_SPIN)
+        glay.addWidget(self.spin_divide_prof)
+        lay.addWidget(grp)
+
+        grp2 = QGroupBox("Visualización"); grp2.setStyleSheet(STYLE_GROUP)
+        glay2 = QVBoxLayout(grp2); glay2.setSpacing(4)
+        self.chk_divide_ruta = QCheckBox("Mostrar rutas de cada zona")
+        self.chk_divide_ruta.setStyleSheet(STYLE_CHECK)
+        self.chk_divide_ruta.setChecked(True)
+        glay2.addWidget(self.chk_divide_ruta)
+        lay.addWidget(grp2)
+
+        lay.addStretch()
+        btn = QPushButton("▶  Ejecutar Divide y Vencerás")
+        btn.setStyleSheet(STYLE_BTN_RUN(C["green"]))
+        btn.clicked.connect(self.ejecutar_divide_venceras); lay.addWidget(btn)
+        return w
+
+    # ── PANEL MOCHILA DP ─────────────────────────────────────────
+    def _panel_mochila(self):
+        w = QWidget(); w.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,8,12,8); lay.setSpacing(8)
+
+        grp = QGroupBox("Capacidad del vehículo"); grp.setStyleSheet(STYLE_GROUP)
+        glay = QVBoxLayout(grp); glay.setSpacing(4)
+        glay.addWidget(lbl("Capacidad máxima (kg):"))
+        self.spin_mochila_cap = QDoubleSpinBox()
+        self.spin_mochila_cap.setRange(1.0, 100.0)
+        self.spin_mochila_cap.setValue(15.0)
+        self.spin_mochila_cap.setSingleStep(0.5)
+        self.spin_mochila_cap.setSuffix(" kg")
+        self.spin_mochila_cap.setStyleSheet(STYLE_SPIN)
+        glay.addWidget(self.spin_mochila_cap)
+        lay.addWidget(grp)
+
+        grp2 = QGroupBox("Filtrar pedidos por prioridad"); grp2.setStyleSheet(STYLE_GROUP)
+        glay2 = QVBoxLayout(grp2); glay2.setSpacing(4)
+        self.chk_mochila_p1 = QCheckBox("Prioridad 1 — Urgente")
+        self.chk_mochila_p2 = QCheckBox("Prioridad 2 — Normal")
+        self.chk_mochila_p3 = QCheckBox("Prioridad 3 — Puede esperar")
+        for chk in [self.chk_mochila_p1, self.chk_mochila_p2, self.chk_mochila_p3]:
+            chk.setChecked(True); chk.setStyleSheet(STYLE_CHECK)
+            glay2.addWidget(chk)
+        lay.addWidget(grp2)
+
+        grp3 = QGroupBox("Método DP"); grp3.setStyleSheet(STYLE_GROUP)
+        glay3 = QVBoxLayout(grp3)
+        self.combo_mochila_met = QComboBox()
+        self.combo_mochila_met.addItems(["Tabulación (bottom-up)", "Memoización (top-down)"])
+        self.combo_mochila_met.setStyleSheet(STYLE_COMBO)
+        glay3.addWidget(self.combo_mochila_met)
+        lay.addWidget(grp3)
+
+        lay.addStretch()
+        btn = QPushButton("▶  Ejecutar Mochila DP")
+        btn.setStyleSheet(STYLE_BTN_RUN(C["accent"]))
+        btn.clicked.connect(self.ejecutar_mochila); lay.addWidget(btn)
+        return w
+
+    # ── PANEL BACKTRACKING ───────────────────────────────────────
+    def _panel_backtracking(self):
+        w = QWidget(); w.setStyleSheet(f"background:{C['bg_side']};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,8,12,8); lay.setSpacing(8)
+
+        grp = QGroupBox("Nodo de origen"); grp.setStyleSheet(STYLE_GROUP)
+        glay = QVBoxLayout(grp); glay.setSpacing(4)
+        glay.addWidget(lbl("Nodo inicio:"))
+        self.combo_bt_inicio = QComboBox()
+        self.combo_bt_inicio.setStyleSheet(STYLE_COMBO)
+        for n in self.nodos_datos:
+            self.combo_bt_inicio.addItem(f"[{n['id']:2}] {n['nombre']}", n["id"])
+        self.combo_bt_inicio.setCurrentIndex(2)   # San Blas por defecto
+        glay.addWidget(self.combo_bt_inicio)
+        lay.addWidget(grp)
+
+        grp2 = QGroupBox("Nodo de destino"); grp2.setStyleSheet(STYLE_GROUP)
+        glay2 = QVBoxLayout(grp2); glay2.setSpacing(4)
+        glay2.addWidget(lbl("Nodo destino:"))
+        self.combo_bt_destino = QComboBox()
+        self.combo_bt_destino.setStyleSheet(STYLE_COMBO)
+        for n in self.nodos_datos:
+            self.combo_bt_destino.addItem(f"[{n['id']:2}] {n['nombre']}", n["id"])
+        self.combo_bt_destino.setCurrentIndex(8)  # Wanchaq por defecto
+        glay2.addWidget(self.combo_bt_destino)
+        lay.addWidget(grp2)
+
+        grp3 = QGroupBox("Calles bloqueadas"); grp3.setStyleSheet(STYLE_GROUP)
+        glay3 = QVBoxLayout(grp3); glay3.setSpacing(4)
+
+        glay3.addWidget(lbl("Aristas bloqueadas actualmente:"))
+        self.list_bloqueos = QListWidget()
+        self.list_bloqueos.setFixedHeight(70)
+        self.list_bloqueos.setStyleSheet(STYLE_LIST)
+        glay3.addWidget(self.list_bloqueos)
+
+        # Agregar bloqueo manual
+        row = QHBoxLayout(); row.setSpacing(4)
+        self.combo_blq_n1 = QComboBox(); self.combo_blq_n1.setStyleSheet(STYLE_COMBO)
+        self.combo_blq_n2 = QComboBox(); self.combo_blq_n2.setStyleSheet(STYLE_COMBO)
+        for n in self.nodos_datos:
+            tag = f"[{n['id']}] {n['nombre'][:12]}"
+            self.combo_blq_n1.addItem(tag, n["id"])
+            self.combo_blq_n2.addItem(tag, n["id"])
+        self.combo_blq_n1.setCurrentIndex(0)
+        self.combo_blq_n2.setCurrentIndex(2)
+        row.addWidget(self.combo_blq_n1, stretch=1)
+        lbl_dash = QLabel("↔"); lbl_dash.setStyleSheet(f"color:{C['text_sub']};")
+        row.addWidget(lbl_dash)
+        row.addWidget(self.combo_blq_n2, stretch=1)
+        glay3.addLayout(row)
+
+        row2 = QHBoxLayout(); row2.setSpacing(4)
+        btn_add = QPushButton("+ Agregar bloqueo")
+        btn_add.setStyleSheet(STYLE_BTN_SMALL)
+        btn_add.clicked.connect(self._agregar_bloqueo)
+        btn_rem = QPushButton("✕ Quitar selección")
+        btn_rem.setStyleSheet(STYLE_BTN_SMALL)
+        btn_rem.clicked.connect(self._quitar_bloqueo)
+        row2.addWidget(btn_add); row2.addWidget(btn_rem)
+        glay3.addLayout(row2)
+        lay.addWidget(grp3)
+
+        grp4 = QGroupBox("Límite de rutas"); grp4.setStyleSheet(STYLE_GROUP)
+        glay4 = QVBoxLayout(grp4); glay4.setSpacing(4)
+        glay4.addWidget(lbl("Máximo de rutas a encontrar:"))
+        self.spin_bt_max = QSpinBox()
+        self.spin_bt_max.setRange(1,20); self.spin_bt_max.setValue(5)
+        self.spin_bt_max.setStyleSheet(STYLE_SPIN)
+        glay4.addWidget(self.spin_bt_max)
+        lay.addWidget(grp4)
+
+        lay.addStretch()
+        btn = QPushButton("▶  Ejecutar Backtracking")
+        btn.setStyleSheet(STYLE_BTN_RUN(C["red"]))
+        btn.clicked.connect(self.ejecutar_backtracking); lay.addWidget(btn)
+        return w
+
+    # ────────────────────────────────────────────────────────────
+    #  HELPERS PANEL
+    # ────────────────────────────────────────────────────────────
+    def _agregar_bloqueo(self):
+        n1 = self.combo_blq_n1.currentData()
+        n2 = self.combo_blq_n2.currentData()
+        if n1 == n2:
+            return
+        par = sorted([n1, n2])
+        if par in self._bloqueos_sel:
+            return
+        self._bloqueos_sel.append(par)
+        nm1 = self.dicc_nodos[par[0]]["nombre"]
+        nm2 = self.dicc_nodos[par[1]]["nombre"]
+        self.list_bloqueos.addItem(f"[{par[0]}↔{par[1]}] {nm1[:10]}↔{nm2[:10]}")
+
+    def _quitar_bloqueo(self):
+        row = self.list_bloqueos.currentRow()
+        if row >= 0:
+            self.list_bloqueos.takeItem(row)
+            self._bloqueos_sel.pop(row)
+
+    def _buscar_pedido(self):
+        pid = self.spin_buscar_id.value()
+        p = next((x for x in self.pedidos if x["id"] == pid), None)
+        if not p:
+            self._log(f"Pedido #{pid} no encontrado.")
+            return
+        no = self.dicc_nodos.get(p["origen"], {})
+        nd = self.dicc_nodos.get(p["destino"], {})
+        txt  = f"═══ BÚSQUEDA PEDIDO #{pid} ═══\n\n"
+        txt += f"Cliente : {p['cliente']}\n"
+        txt += f"Prioridad: {p['prioridad']} ({'Urgente' if p['prioridad']==1 else 'Normal' if p['prioridad']==2 else 'Puede esperar'})\n"
+        txt += f"Peso    : {p['peso']} kg\n"
+        txt += f"Valor   : S/. {p['valor']}\n\n"
+        txt += f"Origen  : [{p['origen']}] {no.get('nombre','?')}\n"
+        txt += f"Destino : [{p['destino']}] {nd.get('nombre','?')}\n"
+        self._log(txt)
+        # resaltar en mapa
+        ids_js = json.dumps([p["origen"], p["destino"]])
+        self._run_js(f"dibujarCamino({ids_js}, '#d29922', 3);")
+        self.lbl_mapa.setText(f"📍  Pedido #{pid} — {p['cliente']}: {no.get('nombre','?')} → {nd.get('nombre','?')}")
+
+    # ────────────────────────────────────────────────────────────
+    #  CLICK DESDE EL MAPA (Bridge)
+    # ────────────────────────────────────────────────────────────
+    def _on_nodo_click_from_map(self, nodo_id):
+        nd = self.dicc_nodos.get(nodo_id)
+        if not nd: return
+        if self._click_mode == "inicio_bt":
+            idx = next(i for i,n in enumerate(self.nodos_datos) if n["id"]==nodo_id)
+            self.combo_bt_inicio.setCurrentIndex(idx)
+            self.lbl_click_mode.setText("")
+            self._click_mode = None
+        elif self._click_mode == "destino_bt":
+            idx = next(i for i,n in enumerate(self.nodos_datos) if n["id"]==nodo_id)
+            self.combo_bt_destino.setCurrentIndex(idx)
+            self.lbl_click_mode.setText("")
+            self._click_mode = None
+        elif self._click_mode == "inicio_greedy":
+            idx = next(i for i,n in enumerate(self.nodos_datos) if n["id"]==nodo_id)
+            self.combo_greedy_inicio.setCurrentIndex(idx)
+            self.lbl_click_mode.setText("")
+            self._click_mode = None
+
+    # ────────────────────────────────────────────────────────────
+    #  SHOW PANELS
+    # ────────────────────────────────────────────────────────────
+    def _show_panel_ordenamiento(self):  self.stack.setCurrentIndex(1)
+    def _show_panel_greedy(self):        self.stack.setCurrentIndex(2)
+    def _show_panel_divide(self):        self.stack.setCurrentIndex(3)
+    def _show_panel_mochila(self):       self.stack.setCurrentIndex(4)
+    def _show_panel_backtracking(self):  self.stack.setCurrentIndex(5)
+
+    # ────────────────────────────────────────────────────────────
+    #  MAPA LEAFLET
+    # ────────────────────────────────────────────────────────────
+    def _load_map(self):
+        nodos_js  = json.dumps(self.nodos_datos)
+        aristas = [{"from":u,"to":v,"peso":round(d["peso"],1)}
+                   for u,v,d in self.G.edges(data=True)]
+        aristas_js = json.dumps(aristas)
+
+        html = f"""<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<style>
+  html,body,#map{{margin:0;padding:0;width:100%;height:100%;background:#0d1117;}}
+  .nodo-lbl{{
+    background:rgba(13,17,23,0.82);color:#e6edf3;
+    font:10px 'Segoe UI',sans-serif;
+    border:1px solid #30363d;border-radius:3px;padding:1px 5px;white-space:nowrap;
+  }}
+  .leaflet-popup-content-wrapper{{background:#1c2128;color:#e6edf3;border:1px solid #30363d;border-radius:6px;}}
+  .leaflet-popup-tip{{background:#1c2128;}}
+</style>
+</head><body><div id="map"></div>
+<script>
+const NODOS   = {nodos_js};
+const ARISTAS = {aristas_js};
+const ND = {{}};
+NODOS.forEach(n => ND[n.id]=n);
+
+const map = L.map('map',{{center:[-13.522,-71.972],zoom:14}});
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{
+  attribution:'© OpenStreetMap',maxZoom:19
+}}).addTo(map);
+
+let layerBase  = L.layerGroup().addTo(map);
+let layerRuta  = L.layerGroup().addTo(map);
+let layerExtra = L.layerGroup().addTo(map);
+let bridge     = null;
+
+new QWebChannel(qt.webChannelTransport, ch => {{
+  bridge = ch.objects.bridge;
+}});
+
+function mkIcon(color, sz) {{
+  sz = sz||10;
+  return L.divIcon({{className:'',
+    html:`<div style="width:${{sz+4}}px;height:${{sz+4}}px;border-radius:50%;
+      background:${{color}};border:2px solid rgba(255,255,255,0.7);
+      box-shadow:0 0 6px ${{color}}88;"></div>`,
+    iconAnchor:[(sz+4)/2,(sz+4)/2]
+  }});
+}}
+
+function dibujarBase() {{
+  layerBase.clearLayers();
+  ARISTAS.forEach(a=>{{
+    const n1=ND[a.from],n2=ND[a.to];
+    if(!n1||!n2) return;
+    L.polyline([[n1.lat,n1.lon],[n2.lat,n2.lon]],
+      {{color:'#2d3748',weight:1.5,opacity:0.8}}).addTo(layerBase);
+  }});
+  NODOS.forEach(n=>{{
+    const mk = L.marker([n.lat,n.lon],{{icon:mkIcon('#e74c3c',8)}})
+      .bindPopup(`<b>[#${{n.id}}] ${{n.nombre}}</b><br>Zona: ${{n.zona}}`)
+      .addTo(layerBase);
+    mk.on('click',()=>{{ if(bridge) bridge.on_nodo_click(n.id); }});
+    L.marker([n.lat,n.lon],{{
+      icon:L.divIcon({{className:'',
+        html:`<div class="nodo-lbl">${{n.nombre}}</div>`,
+        iconAnchor:[-8,16]}}),interactive:false
+    }}).addTo(layerBase);
+  }});
+}}
+dibujarBase();
+
+// ── API Python → JS ──────────────────────────────────────────
+function limpiarRuta(){{layerRuta.clearLayers();layerExtra.clearLayers();}}
+function limpiarTodo(){{dibujarBase();limpiarRuta();}}
+
+function dibujarCamino(ids,color,w){{
+  limpiarRuta();
+  if(ids.length>1){{
+    const coords=ids.map(id=>[ND[id].lat,ND[id].lon]);
+    L.polyline(coords,{{color:color,weight:w||4,opacity:0.95}}).addTo(layerRuta);
+  }}
+  ids.forEach((id,i)=>{{
+    if(!ND[id]) return;
+    const col=i===0?'#3fb950':(i===ids.length-1?'#58a6ff':color);
+    L.marker([ND[id].lat,ND[id].lon],{{icon:mkIcon(col,12)}})
+      .bindPopup(`<b>[${{i+1}}] ${{ND[id].nombre}}</b>`).addTo(layerRuta);
+  }});
+}}
+
+function marcarBloqueados(pares){{
+  pares.forEach(par=>{{
+    const n1=ND[par[0]],n2=ND[par[1]];
+    if(!n1||!n2) return;
+    L.polyline([[n1.lat,n1.lon],[n2.lat,n2.lon]],
+      {{color:'#f85149',weight:5,dashArray:'8,5',opacity:1}})
+      .bindPopup('⛔ BLOQUEADO').addTo(layerExtra);
+    const mx=(n1.lat+n2.lat)/2, my=(n1.lon+n2.lon)/2;
+    L.marker([mx,my],{{icon:L.divIcon({{className:'',
+      html:`<div style="font-size:16px;">⛔</div>`,
+      iconAnchor:[8,8]}}),interactive:false}}).addTo(layerExtra);
+  }});
+}}
+
+function dibujarZonas(zonas,colores,mostrarRutas){{
+  limpiarRuta();
+  zonas.forEach((zona,zi)=>{{
+    const col=colores[zi%colores.length];
+    if(mostrarRutas && zona.length>1){{
+      const coords=zona.map(id=>[ND[id].lat,ND[id].lon]);
+      L.polyline(coords,{{color:col,weight:2,opacity:0.6,dashArray:'5,4'}}).addTo(layerRuta);
+    }}
+    zona.forEach((id,ii)=>{{
+      if(!ND[id]) return;
+      L.circleMarker([ND[id].lat,ND[id].lon],
+        {{radius:11,color:col,fillColor:col,fillOpacity:0.55,weight:2}})
+        .bindPopup(`<b>${{ND[id].nombre}}</b><br>Zona ${{zi+1}}`).addTo(layerRuta);
+    }});
+  }});
+}}
+
+function dibujarPedidosMochila(ids,color){{
+  limpiarRuta();
+  ids.forEach((id,i)=>{{
+    if(!ND[id]) return;
+    L.marker([ND[id].lat,ND[id].lon],{{icon:mkIcon(color,13)}})
+      .bindPopup(`<b>${{ND[id].nombre}}</b><br>Pedido seleccionado #${{i+1}}`).addTo(layerRuta);
+  }});
+}}
+
+function dibujarGreedy(ids,color){{
+  limpiarRuta();
+  if(ids.length>1){{
+    const coords=ids.map(id=>[ND[id].lat,ND[id].lon]);
+    L.polyline(coords,{{color:color,weight:3,dashArray:'8,4',opacity:0.9}}).addTo(layerRuta);
+  }}
+  ids.forEach((id,i)=>{{
+    if(!ND[id]) return;
+    L.marker([ND[id].lat,ND[id].lon],{{icon:mkIcon(color,11)}})
+      .bindPopup(`<b>[${{i+1}}] ${{ND[id].nombre}}</b>`).addTo(layerRuta);
+  }});
+}}
+
+function dibujarOrdenamiento(ids,color){{
+  limpiarRuta();
+  ids.forEach((id,i)=>{{
+    if(!ND[id]) return;
+    L.circleMarker([ND[id].lat,ND[id].lon],
+      {{radius:10,color:color,fillColor:color,fillOpacity:0.6,weight:2}})
+      .bindPopup(`<b>[${{i+1}}] ${{ND[id].nombre}}</b>`).addTo(layerRuta);
+  }});
+}}
+</script></body></html>"""
+        self.mapa_view.setHtml(html, QUrl("about:blank"))
+
+    def _run_js(self, js):
+        self.mapa_view.page().runJavaScript(js)
 
     def _reset_mapa(self):
-        self.modulo_activo = None
-        for frame, ind, _ in self.btns_modulo:
-            frame.config(bg=C["bg_sidebar"])
-            self._bg_rec(frame, C["bg_sidebar"])
-            ind.config(bg=C["bg_sidebar"])
-        self.canvas.delete("all")
-        self._cargar_mapa_fondo()
-        self.dibujar_grafo_base()
-        self.lbl_titulo_mapa.config(text="  📍  Grafo de Cusco — Nodos y Aristas")
-        self.lbl_badge_mapa.config(text=" Estructura: Grafo Ponderado No Dirigido ",
-                                    fg=C["accent2"], bg="#0d2818")
-        self._log("Mapa reiniciado.")
-
-    # ── Eventos del canvas ───────────────────────────────────────
-    def _bind_canvas_eventos(self):
-        self.canvas.bind("<Motion>", self._on_canvas_move)
-        self.canvas.bind("<Leave>",  self._on_canvas_leave)
-
-    def _on_canvas_move(self, event):
-        x, y = event.x, event.y
-        nodo_cercano = None
-        dist_min = 18
-
-        for nodo in self.nodos_datos:
-            nx_, ny_ = self._coords(nodo["lat"], nodo["lon"])
-            d = math.hypot(x - nx_, y - ny_)
-            if d < dist_min:
-                dist_min = d
-                nodo_cercano = nodo
-
-        if nodo_cercano and nodo_cercano != self.nodo_hover:
-            self.nodo_hover = nodo_cercano
-            n = nodo_cercano
-            txt = (f"ID: {n['id']}  |  {n['nombre']}\n"
-                   f"Zona: {n['zona']}  |  "
-                   f"Lat: {n['lat']:.4f}  Lon: {n['lon']:.4f}\n"
-                   f"Conexiones: {len(list(self.G.neighbors(n['id'])))}")
-            self.tooltip.config(text=txt)
-            self.tooltip.place(x=event.x_root - self.root.winfo_rootx() + 14,
-                                y=event.y_root - self.root.winfo_rooty() + 14)
-        elif not nodo_cercano:
-            self.nodo_hover = None
-            self.tooltip.place_forget()
-
-    def _on_canvas_leave(self, e):
-        self.nodo_hover = None
-        self.tooltip.place_forget()
-
-    # ════════════════════════════════════════════════════════════
-    #  LOG
-    # ════════════════════════════════════════════════════════════
+        self._click_mode = None
+        self.lbl_click_mode.setText("")
+        self._run_js("limpiarTodo();")
+        self.lbl_mapa.setText("📍  Mapa Interactivo — Cusco (OpenStreetMap)")
+        self._log("Mapa reiniciado.\nSelecciona un módulo y configura los parámetros.")
 
     def _log(self, texto):
-        self.txt_logs.config(state=tk.NORMAL)
-        self.txt_logs.delete("1.0", tk.END)
-        self.txt_logs.insert(tk.END, texto)
-        self.txt_logs.see(tk.END)
+        self.txt_log.setText(texto)
+        self.txt_log.verticalScrollBar().setValue(0)
 
     # ════════════════════════════════════════════════════════════
-    #  DIBUJO UTILITARIOS
+    #  EJECUTAR MÓDULOS
     # ════════════════════════════════════════════════════════════
 
-    def _dibujar_arista_destacada(self, u, v, color, ancho=3, dash=None, flecha=None, tag="grafo"):
-        x1, y1 = self._coords(self.dicc_nodos[u]["lat"], self.dicc_nodos[u]["lon"])
-        x2, y2 = self._coords(self.dicc_nodos[v]["lat"], self.dicc_nodos[v]["lon"])
-        kwargs = dict(fill=color, width=ancho, smooth=True, tags=tag)
-        if dash:
-            kwargs["dash"] = dash
-        if flecha:
-            kwargs["arrow"] = flecha
-        self.canvas.create_line(x1, y1, x2, y2, **kwargs)
-
-    def _dibujar_nodo_destacado(self, nodo_id, color, radio=10, tag="grafo"):
-        nodo = self.dicc_nodos[nodo_id]
-        x, y = self._coords(nodo["lat"], nodo["lon"])
-        # Halo animado
-        self.canvas.create_oval(x-radio-4, y-radio-4, x+radio+4, y+radio+4,
-                                 fill="", outline=color, width=2, tags=tag)
-        self.canvas.create_oval(x-radio, y-radio, x+radio, y+radio,
-                                 fill=color, outline="white", width=2, tags=tag)
-        self.canvas.create_text(x, y, text=str(nodo_id),
-                                 font=("Consolas", 7, "bold"), fill="black", tags=tag)
-
-    def _dibujar_camino(self, camino, color, ancho=3, tag="grafo"):
-        for i in range(len(camino) - 1):
-            self._dibujar_arista_destacada(camino[i], camino[i+1],
-                                            color=color, ancho=ancho,
-                                            flecha=tk.LAST, tag=tag)
-        for nid in camino:
-            self._dibujar_nodo_destacado(nid, color, tag=tag)
-
-    def _titulo_modulo(self, texto, badge=None, badge_color=None, badge_bg=None):
-        self.lbl_titulo_mapa.config(text=f"  {texto}")
-        if badge:
-            self.lbl_badge_mapa.config(
-                text=f" {badge} ",
-                fg=badge_color or C["accent"],
-                bg=badge_bg or "#0a1f2e"
-            )
-
-    # ════════════════════════════════════════════════════════════
-    #  MÓDULO 1 — ORDENAMIENTOS
-    # ════════════════════════════════════════════════════════════
-
+    # ── 1. ORDENAMIENTOS ─────────────────────────────────────────
     def ejecutar_ordenamiento(self):
-        pedidos = cargar_pedidos()
-        t0 = time.perf_counter()
-        op = gnome_sort_prioridad(pedidos)
-        t1 = time.perf_counter()
-        ope = comb_sot_peso(pedidos)
-        t2 = time.perf_counter()
-        ov = shell_sort_valor(pedidos)
-        t3 = time.perf_counter()
+        criterio = self.combo_orden_criterio.currentIndex()
+        campo    = self.combo_orden_campo.currentIndex()
+        t0       = time.perf_counter()
 
-        self.canvas.delete("grafo")
-        self.dibujar_grafo_base()
-        self._titulo_modulo("📦  Ordenamientos en Almacén",
-                             "Gnome · Comb · Shell Sort",
-                             C["mod_orden"], "#1a0a2e")
+        if criterio == 0:
+            resultado = gnome_sort_prioridad(self.pedidos)
+            metodo, crit_txt, color = "Gnome Sort", "Prioridad", C["purple"]
+        elif criterio == 1:
+            resultado = comb_sot_peso(self.pedidos)
+            metodo, crit_txt, color = "Comb Sort", "Peso (kg)", C["purple"]
+        elif criterio == 2:
+            resultado = shell_sort_valor(self.pedidos)
+            metodo, crit_txt, color = "Shell Sort", "Valor (S/.)", C["purple"]
+        else:
+            r_p = gnome_sort_prioridad(self.pedidos)
+            r_w = comb_sot_peso(self.pedidos)
+            r_v = shell_sort_valor(self.pedidos)
+            t_ms = round((time.perf_counter()-t0)*1000, 3)
+            self.lbl_mapa.setText("📦  Ordenamientos — Comparación de 3 criterios")
+            ids = [p["origen"] for p in r_p]
+            self._run_js(f"dibujarOrdenamiento({json.dumps(ids)}, '{C['purple']}');")
+            txt = "═══ MÓDULO 1: TODOS LOS ORDENAMIENTOS ═══\n\n"
+            txt += f"Tiempo total: {t_ms} ms\n\n"
+            for título, datos, campo_v in [
+                ("GNOME SORT — Prioridad", r_p, "prioridad"),
+                ("COMB SORT — Peso",       r_w, "peso"),
+                ("SHELL SORT — Valor",     r_v, "valor"),
+            ]:
+                txt += f"{título}:\n"
+                for p in datos[:5]:
+                    txt += f"  #{p['id']:<3} {p['cliente']:<14} {campo_v}={p[campo_v]}\n"
+                txt += f"  ... ({len(datos)} pedidos)\n\n"
+            self._log(txt); return
 
-        # Resaltar nodos de los 5 pedidos más urgentes
-        for i, p in enumerate(op[:5]):
-            nid = p["origen"]
-            if nid in self.dicc_nodos:
-                intensidad = ["#8e44ad","#9b59b6","#a66bbe","#b17dcc","#bc8cff"][i]
-                self._dibujar_nodo_destacado(nid, intensidad, radio=9+i, tag="grafo")
+        t_ms = round((time.perf_counter()-t0)*1000, 3)
 
-        t_gnome = round((t1-t0)*1000, 3)
-        t_comb  = round((t2-t1)*1000, 3)
-        t_shell = round((t3-t2)*1000, 3)
+        # Nodos a resaltar
+        if campo == 0:
+            ids = [p["origen"] for p in resultado]
+        elif campo == 1:
+            ids = [p["destino"] for p in resultado]
+        else:
+            ids = []
+            for p in resultado:
+                if p["origen"] not in ids:  ids.append(p["origen"])
+                if p["destino"] not in ids: ids.append(p["destino"])
 
-        txt  = "═══ MÓDULO 1: ORDENAMIENTOS ═══\n\n"
-        txt += f"Total pedidos analizados: {len(pedidos)}\n\n"
-        txt += f"① GNOME SORT — Por Prioridad\n"
-        txt += f"   Complejidad: O(n²)\n"
-        txt += f"   Tiempo real: {t_gnome} ms\n"
-        txt += f"   [1=urgente → 3=puede esperar]\n"
-        for p in op[:5]:
-            txt += f"   #{p['id']:>2} {p['cliente']:<12} Prioridad {p['prioridad']}\n"
-        txt += f"\n② COMB SORT — Por Peso\n"
-        txt += f"   Complejidad: O(n²) / O(n log n) prom.\n"
-        txt += f"   Tiempo real: {t_comb} ms\n"
-        for p in ope[:5]:
-            txt += f"   #{p['id']:>2} {p['cliente']:<12} {p['peso']} kg\n"
-        txt += f"\n③ SHELL SORT — Por Valor\n"
-        txt += f"   Complejidad: O(n log² n)\n"
-        txt += f"   Tiempo real: {t_shell} ms\n"
-        for p in ov[:5]:
-            txt += f"   #{p['id']:>2} {p['cliente']:<12} S/. {p['valor']}\n"
+        self.lbl_mapa.setText(f"📦  {metodo} — ordenado por {crit_txt}")
+        self._run_js(f"dibujarOrdenamiento({json.dumps(ids)}, '{color}');")
+
+        txt  = f"═══ MÓDULO 1: {metodo.upper()} ═══\n\n"
+        txt += f"Criterio  : {crit_txt}\n"
+        txt += f"Tiempo    : {t_ms} ms\n"
+        txt += f"Pedidos   : {len(resultado)}\n\n"
+        txt += f"{'#':<4} {'ID':<4} {'Cliente':<15} {crit_txt}\n"
+        txt += "─"*38 + "\n"
+        for i, p in enumerate(resultado):
+            val = p["prioridad"] if criterio==0 else p["peso"] if criterio==1 else p["valor"]
+            txt += f"{i+1:<4} #{p['id']:<4} {p['cliente']:<15} {val}\n"
         self._log(txt)
 
-    # ════════════════════════════════════════════════════════════
-    #  MÓDULO 2 — DIVIDE Y VENCERÁS
-    # ════════════════════════════════════════════════════════════
+    # ── 2. GREEDY ────────────────────────────────────────────────
+    def ejecutar_greedy(self):
+        nodo_id  = self.combo_greedy_inicio.currentData()
+        n_peds   = self.spin_greedy_n.value()
+        ped_id   = self.combo_greedy_urgente.currentData()
 
-    def ejecutar_divide_y_venceras(self):
-        resultado = procesar_divide_y_venceras(self.G, num_repartidores=3)
+        inicio   = self.dicc_nodos[nodo_id]
+        t0       = time.perf_counter()
+        ruta     = greedy_pedido_mas_cercano(inicio["lat"], inicio["lon"],
+                                              self.pedidos[:n_peds], self.nodos_datos)
+        t_ms     = round((time.perf_counter()-t0)*1000, 3)
 
-        self.canvas.delete("grafo")
-        self.dibujar_grafo_base()
-        self._titulo_modulo("🗺  Zonificación — Divide y Vencerás",
-                             f"Zonas: {resultado['num_zonas']} | Repartidores: 3",
-                             C["mod_divide"], "#0a2010")
+        ped_urg  = next((p for p in self.pedidos if p["id"]==ped_id), self.pedidos[0])
+        repartidores = [
+            {"nombre":"Repartidor 1","lat":-13.5170,"lon":-71.9787},
+            {"nombre":"Repartidor 2","lat":-13.5300,"lon":-71.9600},
+            {"nombre":"Repartidor 3","lat":-13.5250,"lon":-71.9820},
+        ]
+        rep_asig, dist_rep = greedy_repartidor_mas_cercano(ped_urg, repartidores, self.nodos_datos)
 
-        # Colorear zonas con polígono de fondo semitransparente
-        for idx, zona in enumerate(resultado["zonas"]):
-            color = COLORES_ZONA[idx % len(COLORES_ZONA)]
-            pts_poly = []
-            for uid in zona:
-                x, y = self._coords(self.dicc_nodos[uid]["lat"],
-                                     self.dicc_nodos[uid]["lon"])
-                pts_poly.extend([x, y])
+        self.lbl_mapa.setText(f"⚡  Greedy — Inicio: {inicio['nombre']}")
+        ids = [nodo_id]
+        for p in ruta:
+            if p["origen"] not in ids: ids.append(p["origen"])
+            if p["destino"] not in ids: ids.append(p["destino"])
+        self._run_js(f"dibujarGreedy({json.dumps(ids)}, '{C['orange']}');")
 
-            # Dibujar nodos de zona
-            for uid in zona:
-                x, y = self._coords(self.dicc_nodos[uid]["lat"],
-                                     self.dicc_nodos[uid]["lon"])
-                self.canvas.create_oval(x-10, y-10, x+10, y+10,
-                                         fill=color, outline="white",
-                                         width=1.5, tags="grafo")
-                self.canvas.create_text(x, y, text=str(uid),
-                                         font=("Consolas", 7, "bold"),
-                                         fill="black", tags="grafo")
+        txt  = "═══ MÓDULO 2: GREEDY ═══\n\n"
+        txt += f"Inicio    : [{nodo_id}] {inicio['nombre']}\n"
+        txt += f"Pedidos   : {n_peds}\n"
+        txt += f"Complejidad: O(n²)\n"
+        txt += f"Tiempo    : {t_ms} ms\n\n"
+        txt += "RUTA GREEDY (pedido más cercano):\n"
+        txt += f"{'#':<4} {'ID':<4} {'Cliente':<14} {'Prior'}\n"
+        txt += "─"*34 + "\n"
+        for i, p in enumerate(ruta):
+            txt += f"{i+1:<4} #{p['id']:<4} {p['cliente']:<14} P{p['prioridad']}\n"
+        txt += f"\nASIGNACIÓN URGENTE:\n"
+        txt += f"  Pedido  : #{ped_urg['id']} — {ped_urg['cliente']}\n"
+        txt += f"  Origen  : {self.dicc_nodos.get(ped_urg['origen'],{}).get('nombre','?')}\n"
+        if rep_asig:
+            txt += f"  Asignado: {rep_asig['nombre']}\n"
+            txt += f"  Distancia: {dist_rep:.1f} m\n"
+        self._log(txt)
 
-        # Rutas de cada repartidor
-        for id_rep, datos in resultado["asignaciones"].items():
-            ruta  = datos["ruta"]
-            color = COLORES_ZONA[(id_rep - 1) % len(COLORES_ZONA)]
-            for i in range(len(ruta) - 1):
-                self._dibujar_arista_destacada(ruta[i], ruta[i+1],
-                                                color=color, ancho=2,
-                                                dash=(8, 4), flecha=tk.LAST)
+    # ── 3. DIVIDE Y VENCERÁS ─────────────────────────────────────
+    def ejecutar_divide_venceras(self):
+        n_reps      = self.spin_divide_reps.value()
+        prof        = self.spin_divide_prof.value()
+        mostrar_rut = self.chk_divide_ruta.isChecked()
 
-        txt  = "═══ MÓDULO 2: DIVIDE Y VENCERÁS ═══\n\n"
-        txt += f"Algoritmo: {resultado['algoritmo']}\n"
-        txt += f"Complejidad: {resultado['complejidad']}\n"
-        txt += f"Tiempo: {resultado['tiempo_ms']} ms\n"
-        txt += f"Zonas generadas: {resultado['num_zonas']}\n\n"
-        txt += "Estrategia: dividir por eje de mayor\n"
-        txt += "extensión geográfica (lon o lat).\n\n"
+        # Parchear profundidad máxima temporalmente
+        from algoritmos import divide_venceras as dv_mod
+        orig_prof = None
+        resultado = procesar_divide_y_venceras.__wrapped__(self.G, n_reps, prof) \
+            if hasattr(procesar_divide_y_venceras, '__wrapped__') \
+            else self._procesar_dv(n_reps, prof)
+
+        self.lbl_mapa.setText(f"🗺  Divide y Vencerás — {n_reps} repartidores, profundidad {prof}")
+        zonas_js = json.dumps(resultado["zonas"])
+        col_js   = json.dumps(COLORES_ZONA)
+        self._run_js(f"dibujarZonas({zonas_js},{col_js},{'true' if mostrar_rut else 'false'});")
+
+        txt  = "═══ MÓDULO 3: DIVIDE Y VENCERÁS ═══\n\n"
+        txt += f"Repartidores: {n_reps}\n"
+        txt += f"Profundidad : {prof}\n"
+        txt += f"Zonas gen.  : {resultado['num_zonas']}\n"
+        txt += f"Complejidad : {resultado['complejidad']}\n"
+        txt += f"Tiempo      : {resultado['tiempo_ms']} ms\n\n"
+        nombres_col = ["Verde","Naranja","Violeta","Azul"]
         for rep, datos in resultado["asignaciones"].items():
             nombres = [self.dicc_nodos[uid]["nombre"] for uid in datos["ruta"]]
-            color_n = ["Verde","Naranja","Violeta","Azul"][rep-1]
-            txt += f"Rep {rep} ({color_n}):\n"
-            txt += f"  Nodos: {len(datos['ruta'])}\n"
-            txt += f"  Dist: {datos['distancia_m']} m\n"
+            col_n   = nombres_col[(rep-1)%len(nombres_col)]
+            txt += f"Repartidor {rep} ({col_n}):\n"
+            txt += f"  Nodos   : {len(datos['ruta'])}\n"
+            txt += f"  Distancia: {datos['distancia_m']} m\n"
             for n in nombres:
                 txt += f"  → {n}\n"
             txt += "\n"
         self._log(txt)
 
-    # ════════════════════════════════════════════════════════════
-    #  MÓDULO 3 — BACKTRACKING
-    # ════════════════════════════════════════════════════════════
-
-    def ejecutar_backtracking(self):
-        calles_bloqueadas = [[1, 3]]
-        resultado = backtracking_rutas_con_restricciones(
-            self.G, inicio=3, destino=9,
-            aristas_bloqueadas=calles_bloqueadas, max_rutas=5
+    def _procesar_dv(self, n_reps, prof):
+        """Llama a procesar_divide_y_venceras con profundidad dinámica."""
+        from algoritmos.divide_venceras import (
+            dividir_zona, greedy_vecino_mas_cercano, UBICACIONES
         )
+        import algoritmos.divide_venceras as dv
+        import time
+        t0 = time.perf_counter()
+        dv.UBICACIONES = {}
+        for nid, datos in self.G.nodes(data=True):
+            dv.UBICACIONES[nid] = {"lat": datos["lat"], "lon": datos["lon"]}
+        todos = list(self.G.nodes())
+        zonas = dv.dividir_zona(todos, 0, prof)
+        asig_raw = {}
+        for iz, zona in enumerate(zonas):
+            ir = (iz % n_reps) + 1
+            asig_raw.setdefault(ir, [])
+            asig_raw[ir].extend(zona)
+        asignaciones = {}
+        for ir, locs in asig_raw.items():
+            if len(locs) < 2:
+                asignaciones[ir] = {"ruta": locs, "distancia_m": 0.0}
+                continue
+            r = dv.greedy_vecino_mas_cercano(locs[0], locs[1:])
+            asignaciones[ir] = {"ruta": r["ruta"], "distancia_m": r["distancia_m"]}
+        t_ms = round((time.perf_counter()-t0)*1000, 4)
+        return {"zonas": zonas, "asignaciones": asignaciones,
+                "num_zonas": len(zonas), "num_repartidores": n_reps,
+                "tiempo_ms": t_ms,
+                "complejidad": "O(n log n) división + O(k²) por zona",
+                "algoritmo": "Divide y Vencerás — Segmentación Geográfica"}
 
-        self.canvas.delete("grafo")
-        self.dibujar_grafo_base()
-        self._titulo_modulo("🚧  Contingencia Vial — Backtracking",
-                             f"Rutas halladas: {resultado['total_rutas']}",
-                             C["mod_back"], "#2a0a0a")
+    # ── 4. MOCHILA DP ────────────────────────────────────────────
+    def ejecutar_mochila(self):
+        capacidad = self.spin_mochila_cap.value()
+        metodo    = self.combo_mochila_met.currentIndex()
 
-        # Arista bloqueada
-        self._dibujar_arista_destacada(1, 3, color=C["accent4"],
-                                        ancho=4, dash=(5, 4), tag="grafo")
-        x1, y1 = self._coords(self.dicc_nodos[1]["lat"], self.dicc_nodos[1]["lon"])
-        x2, y2 = self._coords(self.dicc_nodos[3]["lat"], self.dicc_nodos[3]["lon"])
-        self.canvas.create_text((x1+x2)//2, (y1+y2)//2 - 14,
-                                 text="⛔ BLOQUEADO",
-                                 font=("Segoe UI", 8, "bold"),
-                                 fill=C["accent4"], tags="grafo")
+        # Filtrar por prioridad
+        prioridades = []
+        if self.chk_mochila_p1.isChecked(): prioridades.append(1)
+        if self.chk_mochila_p2.isChecked(): prioridades.append(2)
+        if self.chk_mochila_p3.isChecked(): prioridades.append(3)
+        pedidos_f = [p for p in self.pedidos if p["prioridad"] in prioridades]
+        if not pedidos_f:
+            self._log("Selecciona al menos un nivel de prioridad."); return
 
-        # Rutas alternativas (gris)
-        for r in resultado["rutas"][1:]:
-            for i in range(len(r["camino"]) - 1):
-                self._dibujar_arista_destacada(r["camino"][i], r["camino"][i+1],
-                                                color="#4a5568", ancho=1,
-                                                dash=(3, 3), tag="grafo")
+        from algoritmos.dinamica import knapsack_tabulacion, knapsack_memoizacion
+        t0 = time.perf_counter()
+        if metodo == 0:
+            sel, peso, valor = knapsack_tabulacion(pedidos_f, capacidad)
+            met_txt = "Tabulación (bottom-up)"
+        else:
+            sel, peso, valor = knapsack_memoizacion(pedidos_f, capacidad)
+            met_txt = "Memoización (top-down)"
+        t_ms = round((time.perf_counter()-t0)*1000, 3)
 
-        # Mejor ruta (rojo)
-        if resultado["mejor_ruta"]:
-            camino = resultado["mejor_ruta"]["camino"]
-            self._dibujar_camino(camino, color=C["accent4"], ancho=3)
+        self.lbl_mapa.setText(f"⚖  Mochila DP ({met_txt}) — S/. {valor}  |  {peso} kg / {capacidad} kg")
+        ids_orig = [p["origen"] for p in sel]
+        self._run_js(f"dibujarPedidosMochila({json.dumps(ids_orig)}, '{C['accent']}');")
 
-            # Nodo inicio (verde) y destino (azul)
-            self._dibujar_nodo_destacado(camino[0],  C["accent2"], radio=11, tag="grafo")
-            self._dibujar_nodo_destacado(camino[-1], C["accent"],  radio=11, tag="grafo")
+        txt  = f"═══ MÓDULO 4: MOCHILA DP ═══\n\n"
+        txt += f"Método    : {met_txt}\n"
+        txt += f"Capacidad : {capacidad} kg\n"
+        txt += f"Disponibles: {len(pedidos_f)} pedidos\n"
+        txt += f"Seleccionados: {len(sel)}\n"
+        txt += f"Tiempo    : {t_ms} ms\n\n"
+        txt += f"► Valor máximo: S/. {valor}\n"
+        txt += f"► Peso cargado: {peso} kg\n\n"
+        txt += "PEDIDOS EN EL VEHÍCULO:\n"
+        txt += f"{'#':<4} {'ID':<4} {'Cliente':<14} {'Peso':<8} Valor\n"
+        txt += "─"*42 + "\n"
+        for i, p in enumerate(sel):
+            txt += f"{i+1:<4} #{p['id']:<4} {p['cliente']:<14} {p['peso']:<8}kg S/.{p['valor']}\n"
+        self._log(txt)
 
-        txt  = "═══ MÓDULO 3: BACKTRACKING VIAL ═══\n\n"
-        txt += f"Algoritmo: {resultado['algoritmo']}\n"
-        txt += f"Complejidad: {resultado['complejidad']}\n"
-        txt += f"Nodos evaluados: {resultado['nodos_explorados']}\n"
-        txt += f"Tiempo: {resultado['tiempo_ms']} ms\n\n"
-        txt += "Tramo ⛔: Plaza de Armas ↔ San Blas\n"
-        txt += "Origen  : San Blas (ID 3)\n"
-        txt += "Destino : Wanchaq (ID 9)\n\n"
-        if resultado["mejor_ruta"]:
-            camino = resultado["mejor_ruta"]["camino"]
-            txt += f"Rutas alternativas: {resultado['total_rutas']}\n\n"
+    # ── 5. BACKTRACKING ──────────────────────────────────────────
+    def ejecutar_backtracking(self):
+        inicio  = self.combo_bt_inicio.currentData()
+        destino = self.combo_bt_destino.currentData()
+        max_r   = self.spin_bt_max.value()
+
+        if inicio == destino:
+            self._log("El nodo de inicio y destino deben ser diferentes."); return
+
+        bloqueadas = [list(b) for b in self._bloqueos_sel]
+        resultado  = backtracking_rutas_con_restricciones(
+            self.G, inicio=inicio, destino=destino,
+            aristas_bloqueadas=bloqueadas, max_rutas=max_r)
+
+        nm_i = self.dicc_nodos[inicio]["nombre"]
+        nm_d = self.dicc_nodos[destino]["nombre"]
+        self.lbl_mapa.setText(
+            f"🚧  Backtracking: {nm_i} → {nm_d}  ({resultado['total_rutas']} rutas)")
+
+        # Limpiar y dibujar bloqueados
+        self._run_js("limpiarRuta();")
+        if bloqueadas:
+            self._run_js(f"marcarBloqueados({json.dumps(bloqueadas)});")
+
+        if resultado.get("mejor_ruta"):
+            camino_js = json.dumps(resultado["mejor_ruta"]["camino"])
+            self._run_js(f"dibujarCamino({camino_js}, '{C['red']}', 4);")
+
+        txt  = "═══ MÓDULO 5: BACKTRACKING ═══\n\n"
+        txt += f"Origen    : [{inicio}] {nm_i}\n"
+        txt += f"Destino   : [{destino}] {nm_d}\n"
+        txt += f"Bloqueadas: {len(bloqueadas)} aristas\n"
+        txt += f"Máx. rutas: {max_r}\n"
+        txt += f"Complejidad: O(V!) podado\n"
+        txt += f"Nodos eval.: {resultado['nodos_explorados']}\n"
+        txt += f"Tiempo    : {resultado['tiempo_ms']} ms\n\n"
+
+        if bloqueadas:
+            txt += "⛔ BLOQUEOS:\n"
+            for b in bloqueadas:
+                nm1 = self.dicc_nodos.get(b[0],{}).get("nombre","?")
+                nm2 = self.dicc_nodos.get(b[1],{}).get("nombre","?")
+                txt += f"  {nm1} ↔ {nm2}\n"
+            txt += "\n"
+
+        if resultado.get("mejor_ruta"):
+            txt += f"Rutas encontradas: {resultado['total_rutas']}\n\n"
             txt += "MEJOR RUTA:\n"
-            for uid in camino:
+            for uid in resultado["mejor_ruta"]["camino"]:
                 txt += f"  → {self.dicc_nodos[uid]['nombre']}\n"
             txt += f"\nDistancia: {resultado['mejor_ruta']['distancia_m']} m\n\n"
             txt += "TODAS LAS RUTAS:\n"
             for i, r in enumerate(resultado["rutas"]):
                 ns = [self.dicc_nodos[u]["nombre"] for u in r["camino"]]
-                txt += f"{i+1}. {' → '.join(ns)}\n   ({r['distancia_m']} m)\n"
+                txt += f"  {i+1}. {' → '.join(ns)}\n     ({r['distancia_m']} m)\n"
+        else:
+            txt += "❌ No se encontraron rutas.\nRevisa los bloqueos o cambia origen/destino.\n"
         self._log(txt)
 
-    # ════════════════════════════════════════════════════════════
-    #  MÓDULO 4 — MOCHILA DP
-    # ════════════════════════════════════════════════════════════
 
-    def ejecutar_mochila(self):
-        pedidos = cargar_pedidos()
-        limite  = 15.0
-        resultado = optimizar_carga_mochila(pedidos, limite)
+# ════════════════════════════════════════════════════════════════
+#  MAIN
+# ════════════════════════════════════════════════════════════════
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("Rutas Óptimas Cusco")
+    app.setStyle("Fusion")
+    win = SistemaRutasCusco()
+    win.show()
+    sys.exit(app.exec_())
 
-        self.canvas.delete("grafo")
-        self.dibujar_grafo_base()
-        self._titulo_modulo("⚖  Optimización de Carga — Mochila DP",
-                             f"Valor máx: S/. {resultado['valor_maximo']}",
-                             C["mod_dp"], "#0a1830")
-
-        # Resaltar orígenes de pedidos seleccionados
-        for i, p in enumerate(resultado["pedidos_incluidos"]):
-            nid = p["origen"]
-            if nid in self.dicc_nodos:
-                self._dibujar_nodo_destacado(nid, C["mod_dp"], radio=10, tag="grafo")
-                x, y = self._coords(self.dicc_nodos[nid]["lat"],
-                                     self.dicc_nodos[nid]["lon"])
-                self.canvas.create_text(x, y+18, text=f"S/.{p['valor']}",
-                                         font=("Consolas", 7), fill=C["accent"],
-                                         tags="grafo")
-
-        txt  = "═══ MÓDULO 4: MOCHILA (KNAPSACK 0/1) ═══\n\n"
-        txt += f"Algoritmo: {resultado['algoritmo']}\n"
-        txt += f"Complejidad: {resultado['complejidad']}\n"
-        txt += f"Tiempo: {resultado['tiempo_ms']} ms\n\n"
-        txt += f"Capacidad : {limite} kg\n"
-        txt += f"Disponibles: {len(pedidos)} pedidos\n"
-        txt += f"Seleccionados: {len(resultado['pedidos_incluidos'])}\n\n"
-        txt += f"► Valor máximo: S/. {resultado['valor_maximo']}\n"
-        txt += f"► Peso cargado: {resultado['peso_total']} kg\n\n"
-        txt += "PEDIDOS EN EL VEHÍCULO:\n"
-        for p in resultado["pedidos_incluidos"]:
-            txt += f"  ✓ #{p['id']:>2} {p['cliente']:<12} {p['peso']}kg  S/.{p['valor']}\n"
-        self._log(txt)
-
-    # ════════════════════════════════════════════════════════════
-    #  MÓDULO 5 — GREEDY
-    # ════════════════════════════════════════════════════════════
-
-    def ejecutar_greedy(self):
-        from algoritmos.greedy import greedy_pedido_mas_cercano, greedy_repartidor_mas_cercano
-
-        pedidos = cargar_pedidos()
-        plaza   = self.dicc_nodos[1]
-        t0 = time.perf_counter()
-        ruta = greedy_pedido_mas_cercano(plaza["lat"], plaza["lon"],
-                                          pedidos[:8], self.nodos_datos)
-        t1 = time.perf_counter()
-
-        repartidores = [
-            {"nombre": "Repartidor 1", "lat": -13.5170, "lon": -71.9787},
-            {"nombre": "Repartidor 2", "lat": -13.5300, "lon": -71.9600},
-            {"nombre": "Repartidor 3", "lat": -13.5250, "lon": -71.9820},
-        ]
-        ped_urgente = next(p for p in pedidos if p["prioridad"] == 1)
-        rep_asig, dist_rep = greedy_repartidor_mas_cercano(
-            ped_urgente, repartidores, self.nodos_datos)
-
-        self.canvas.delete("grafo")
-        self.dibujar_grafo_base()
-        self._titulo_modulo("⚡  Algoritmo Greedy — Vecino más Cercano",
-                             "Estrategia local óptima", C["mod_greedy"], "#1e1000")
-
-        # Dibujar ruta greedy sobre el mapa
-        ids_visitados = []
-        for p in ruta:
-            if p["origen"] not in ids_visitados:
-                ids_visitados.append(p["origen"])
-            if p["destino"] not in ids_visitados:
-                ids_visitados.append(p["destino"])
-
-        for i in range(len(ids_visitados) - 1):
-            if ids_visitados[i] in self.dicc_nodos and ids_visitados[i+1] in self.dicc_nodos:
-                self._dibujar_arista_destacada(ids_visitados[i], ids_visitados[i+1],
-                                                color=C["mod_greedy"], ancho=2,
-                                                dash=(6, 3), flecha=tk.LAST, tag="grafo")
-
-        for i, nid in enumerate(ids_visitados):
-            if nid in self.dicc_nodos:
-                self._dibujar_nodo_destacado(nid, C["mod_greedy"], radio=9, tag="grafo")
-                x, y = self._coords(self.dicc_nodos[nid]["lat"],
-                                     self.dicc_nodos[nid]["lon"])
-                self.canvas.create_text(x+14, y-14, text=str(i+1),
-                                         font=("Consolas", 7, "bold"),
-                                         fill=C["mod_greedy"], tags="grafo")
-
-        t_ms = round((t1-t0)*1000, 3)
-        txt  = "═══ MÓDULO 5: GREEDY ═══\n\n"
-        txt += "Estrategia: pedido más cercano primero\n"
-        txt += "Complejidad: O(n²)\n"
-        txt += f"Tiempo real: {t_ms} ms\n\n"
-        txt += "RUTA DESDE PLAZA DE ARMAS:\n"
-        for i, p in enumerate(ruta):
-            txt += f"  {i+1}. #{p['id']:>2} {p['cliente']:<12} Prior.{p['prioridad']}\n"
-        txt += f"\nASIGNACIÓN URGENTE:\n"
-        txt += f"  Pedido: #{ped_urgente['id']} {ped_urgente['cliente']}\n"
-        txt += f"  Asignado a: {rep_asig['nombre']}\n"
-        txt += f"  Distancia: {dist_rep:.1f} m\n"
-        self._log(txt)
+if __name__ == "__main__":
+    main()
