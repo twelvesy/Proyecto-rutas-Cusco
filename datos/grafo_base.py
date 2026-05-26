@@ -1,9 +1,13 @@
 import json
 import networkx as nx
 import math
+import os
 
+_BASE = os.path.dirname(os.path.abspath(__file__))
 #---Leer nodos desde el JSON
 def cargar_nodos(ruta_json="datos/nodos_cusco.json"):
+    if ruta_json is None:
+        ruta_json = os.path.join(_BASE, "nodos_cusco.json")
     with open(ruta_json, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data["nodos"]
