@@ -3,7 +3,6 @@ interfaz.py — Sistema de Gestión de Rutas Óptimas en Cusco
 ===========================================================
 PyQt5 + QtWebEngineWidgets · Mapa Leaflet interactivo
 UNSAAC — Programación III, 2026
-Versión 2.0 — Paneles de control configurables por módulo
 """
 
 import sys, os, json, time
@@ -45,11 +44,11 @@ C = {
 }
 
 MODULOS = [
-    ("📦", "Ordenamientos",     "Gnome · Comb · Shell",    C["purple"], "O(n²)"),
-    ("⚡", "Greedy",             "Vecino más cercano",       C["orange"], "O(n²)"),
-    ("🗺", "Divide y Vencerás", "Segmentación geográfica",  C["green"],  "O(n log n)"),
-    ("⚖",  "Mochila DP",        "Knapsack 0/1",             C["accent"], "O(n·W)"),
-    ("🚧", "Backtracking",      "Restricciones viales",     C["red"],    "O(V!)"),
+    ("", "Ordenamientos",     "Gnome · Comb · Shell",    C["purple"], "O(n²)"),
+    ("", "Greedy",             "Vecino más cercano",       C["orange"], "O(n²)"),
+    ("", "Divide y Vencerás", "Segmentación geográfica",  C["green"],  "O(n log n)"),
+    ("",  "Mochila DP",        "Knapsack 0/1",             C["accent"], "O(n·W)"),
+    ("", "Backtracking",      "Restricciones viales",     C["red"],    "O(V!)"),
 ]
 COLORES_ZONA = ["#2ecc71", "#e67e22", "#9b59b6", "#3498db"]
 
@@ -288,12 +287,12 @@ class SistemaRutasCusco(QMainWindow):
         lay.addWidget(sep_h())
         lay.addSpacing(8)
 
-        info_hdr = QLabel("  DOCENTES"); info_hdr.setFont(QFont("Segoe UI",9,QFont.Bold))
+        info_hdr = QLabel("  Alumnos"); info_hdr.setFont(QFont("Segoe UI",9,QFont.Bold))
         info_hdr.setStyleSheet(f"color:{C['text_dim']};padding:4px 20px;"); lay.addWidget(info_hdr)
         for txt,col2 in [
-            ("M.Sc. Hector E. Ugarte R.", C["text"]),
-            ("M.Sc. Boris Chullo Llave",  C["text"]),
-            ("Entrega: 28 mayo 2026",     C["yellow"]),
+            ("Condori Lima Crhistian", C["text"]),
+            ("Diaz Gutierrez Lizardo",  C["text"]),
+            ("Ramos Mamani Yovana",  C["text"]),
         ]:
             l = QLabel(f"  {txt}"); l.setFont(QFont("Segoe UI",8))
             l.setStyleSheet(f"color:{col2};padding:2px 20px;"); lay.addWidget(l)
