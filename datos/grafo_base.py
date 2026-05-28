@@ -52,15 +52,6 @@ def mostrar_resumen(G):
     print(f"  Nodos    : {G.number_of_nodes()}")
     print(f"  Conexiones: {G.number_of_edges()}")
     print(f"{'='*45}")
-    print("\n  Conexiones por nodo:")
-    for nodo_id, datos in G.nodes(data=True):
-        vecinos = list(G.neighbors(nodo_id))
-        print(f"  [{nodo_id:2}] {datos['nombre']:<22} → {len(vecinos)} conexiones")
-    print(f"\n  Detalle de aristas (distancia en metros):")
-    for u, v, datos in G.edges(data=True):
-        n1 = G.nodes[u]["nombre"]
-        n2 = G.nodes[v]["nombre"]
-        print(f"  {n1:<22} ↔ {n2:<22} : {datos['peso']:>8.1f} m")
 
 #---Main
 if __name__ == "__main__":
