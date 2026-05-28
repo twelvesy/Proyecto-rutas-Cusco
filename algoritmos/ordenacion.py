@@ -1,4 +1,7 @@
 import json
+import os
+
+_BASE = os.path.dirname(os.path.abspath(__file__))
 
 #---Cargando pedidos desde json
 def cargar_pedidos(ruta_json="datos/pedidos.json"):
@@ -71,31 +74,13 @@ def mostrar_pedidos(pedidos, titulo="Pedidos"):
     print(f"\n{'='*60}")
     print(f"  {titulo}")
     print(f"{'='*60}")
-    print(f"  {'ID':<4} {'Cliente':<12} {'Origen':<8} {'Destino':<8} {'Peso':<7} {'Valor':<8} {'Prior.'}")
-    print(f"  {'-'*55}")
     for p in pedidos:
-        print(f"  {p['id']:<4} {p['cliente']:<12} {p['origen']:<8} {p['destino']:<8} {p['peso']:<7} {p['valor']:<8} {p['prioridad']}")
-
+        print(f"  {p['id']:<4} {p['cliente']:<12} Prior:{p['prioridad']} Peso:{p['peso']} Valor:{p['valor']}")
 #---Main
-if __name__=="__main__":
+if __name__ == "__main__":
     pedidos = cargar_pedidos()
-    mostrar_pedidos(pedidos,"Pedidos originales")
-
-    ordenados_prioridad = gnome_sort_prioridad(pedidos)
-    mostrar_pedidos(ordenados_prioridad,"Ordenados por prioridad")
-
-    ordenados_peso=comb_sot_peso(pedidos)
-    mostrar_pedidos(ordenados_peso,"Ordenados por peso")
-
-    ordenados_valor=shell_sort_valor(pedidos)
-    mostrar_pedidos(ordenados_valor,"Ordenados por valor")
-
-    print(f"\n{'='*60}")
-    print("  Búsquedas")
-    print(f"{'='*60}")
-    resultado=buscar_por_id(pedidos,5)
-    print(f"\n Buscar ID 5: {resultado}")
-
-    resultado = buscar_por_cliente(pedidos,"Cliente C")
-    print(f" Buscar 'Cliente C': {resultado}")
+    mostrar_pedidos(pedidos, "Pedidos originales")
+    mostrar_pedidos(gnome_sort_prioridad(pedidos), "Ordenados por prioridad")
+    mostrar_pedidos(comb_sot_peso(pedidos), "Ordenados por peso")
+    mostrar_pedidos(shell_sort_valor(pedidos), "Ordenados por valor")
     
